@@ -4,6 +4,8 @@ import { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
 import type { PurchaseOrder, PurchaseOrderItem } from "@/lib/database.types";
 
 type ProductOption = {
@@ -39,6 +41,8 @@ export default function PurchaseDetailPage() {
 function PurchaseDetailContent() {
   const searchParams = useSearchParams();
   const poId = Number(searchParams.get("id"));
+  const { toast } = useToast();
+  const { confirm } = useConfirm();
 
   const [po, setPo] = useState<PurchaseOrder | null>(null);
   const [items, setItems] = useState<PurchaseOrderItem[]>([]);
@@ -82,7 +86,6 @@ function PurchaseDetailContent() {
 
   const advanceStatus = async () => {
     if (!po) return;
-    // Find current step index
     let currentIdx = -1;
     for (let i = STATUS_STEPS.length - 1; i >= 0; i--) {
       if (po[STATUS_STEPS[i].key as keyof PurchaseOrder]) {
@@ -93,15 +96,24 @@ function PurchaseDetailContent() {
     const nextIdx = currentIdx + 1;
     if (nextIdx >= STATUS_STEPS.length) return;
 
+    const nextLabel = STATUS_STEPS[nextIdx].label;
+    const ok = await confirm({
+      title: "推進狀態",
+      message: `確定將此採購單推進到「${nextLabel}」？`,
+      confirmText: `推進到「${nextLabel}」`,
+    });
+    if (!ok) return;
+
     const nextKey = STATUS_STEPS[nextIdx].key;
     const { error: err } = await getSupabase()
       .from("purchase_orders")
       .update({ [nextKey]: true })
       .eq("id", poId);
     if (err) {
-      alert(err.message);
+      toast(err.message, "error");
       return;
     }
+    toast(`已推進到「${nextLabel}」`);
     fetchData();
   };
 
@@ -141,22 +153,29 @@ function PurchaseDetailContent() {
       setItemShipping(0);
       fetchData();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "新增失敗");
+      toast(e instanceof Error ? e.message : "新增失敗", "error");
     } finally {
       setSavingItem(false);
     }
   };
 
   const removeItem = async (itemId: number) => {
-    if (!confirm("確定刪除此品項？")) return;
+    const ok = await confirm({
+      title: "刪除品項",
+      message: "確定要刪除此品項？此操作無法復原。",
+      confirmText: "刪除",
+      danger: true,
+    });
+    if (!ok) return;
     const { error: err } = await getSupabase()
       .from("purchase_order_items")
       .delete()
       .eq("id", itemId);
     if (err) {
-      alert(err.message);
+      toast(err.message, "error");
       return;
     }
+    toast("已刪除品項");
     fetchData();
   };
 
@@ -412,7 +431,7 @@ function PurchaseDetailContent() {
                     </div>
                     <button
                       onClick={() => removeItem(item.id)}
-                      className="text-slate-300 hover:text-red-500 text-xs flex-shrink-0"
+                      className="text-red-400 hover:text-red-600 text-xs font-medium flex-shrink-0"
                     >
                       刪除
                     </button>

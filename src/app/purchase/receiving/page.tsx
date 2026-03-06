@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
 import type { ConsolidatedShipment, ConsolidatedShipmentItem } from "@/lib/database.types";
 
 export default function ReceivingPage() {
@@ -24,6 +25,7 @@ type ItemWithReceiving = ConsolidatedShipmentItem & {
 function ReceivingContent() {
   const searchParams = useSearchParams();
   const shipmentId = Number(searchParams.get("shipment_id"));
+  const { toast } = useToast();
 
   const [shipment, setShipment] = useState<ConsolidatedShipment | null>(null);
   const [items, setItems] = useState<ItemWithReceiving[]>([]);
@@ -54,7 +56,7 @@ function ReceivingContent() {
       }));
       setItems(mapped);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "載入失敗");
+      toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
       setLoading(false);
     }
@@ -187,10 +189,10 @@ function ReceivingContent() {
         .update({ status: "已驗收" })
         .eq("id", shipmentId);
 
-      alert("驗收完成！庫存與成本已更新。");
+      toast("驗收完成！庫存與成本已更新。");
       window.location.href = "/purchase/shipments";
     } catch (e) {
-      alert(e instanceof Error ? e.message : "驗收失敗");
+      toast(e instanceof Error ? e.message : "驗收失敗", "error");
     } finally {
       setSubmitting(false);
     }

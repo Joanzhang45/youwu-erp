@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
 
 const CATEGORIES = [
@@ -34,6 +35,7 @@ type SortKey = "product_name" | "selling_price" | "stock_qty" | "unit_cost_ntd" 
 type SortDir = "asc" | "desc";
 
 export default function ProductsPage() {
+  const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +128,7 @@ export default function ProductsPage() {
       setEditingId(null);
       fetchProducts();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "儲存失敗");
+      toast(e instanceof Error ? e.message : "儲存失敗", "error");
     } finally {
       setSaving(false);
     }
@@ -134,7 +136,7 @@ export default function ProductsPage() {
 
   const createProduct = async () => {
     if (!addForm.product_name?.trim()) {
-      alert("請輸入商品名稱");
+      toast("請輸入商品名稱", "error");
       return;
     }
     setSaving(true);
@@ -160,7 +162,7 @@ export default function ProductsPage() {
       setAddForm({ product_status: "測品", product_positioning: "一般款" });
       fetchProducts();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "新增失敗");
+      toast(e instanceof Error ? e.message : "新增失敗", "error");
     } finally {
       setSaving(false);
     }

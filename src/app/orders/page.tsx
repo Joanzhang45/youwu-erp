@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
 import type { SalesOrder } from "@/lib/database.types";
 
 export default function OrdersPage() {
+  const { toast } = useToast();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -22,7 +24,7 @@ export default function OrdersPage() {
       if (error) throw error;
       setOrders(data || []);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "載入失敗");
+      toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
       setLoading(false);
     }

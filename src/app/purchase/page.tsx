@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
 import type { PurchaseOrder } from "@/lib/database.types";
 
 const STATUS_STEPS = [
@@ -35,6 +36,7 @@ function getStatusColor(status: string): string {
 type FilterType = "all" | "active" | "completed" | "cancelled";
 
 export default function PurchasePage() {
+  const { toast } = useToast();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +109,7 @@ export default function PurchasePage() {
       setCreateForm({ purchaser: "", forwarder: "", cny_rate: 4.6, shipping_rate_per_kg: 0, payment_method: "信用卡", notes: "" });
       fetchOrders();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "建立失敗");
+      toast(e instanceof Error ? e.message : "建立失敗", "error");
     } finally {
       setSaving(false);
     }

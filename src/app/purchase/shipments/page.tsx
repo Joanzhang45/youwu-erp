@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
 import type { ConsolidatedShipment } from "@/lib/database.types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -14,6 +16,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ShipmentsPage() {
+  const { toast } = useToast();
   const [shipments, setShipments] = useState<ConsolidatedShipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -37,7 +40,7 @@ export default function ShipmentsPage() {
       if (error) throw error;
       setShipments(data || []);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "載入失敗");
+      toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
       setLoading(false);
     }
@@ -59,7 +62,7 @@ export default function ShipmentsPage() {
     const shippingCost = Number(form.shipping_cost_ntd);
     const duty = Number(form.customs_duty) || 0;
     if (!weight || !shippingCost) {
-      alert("請填寫重量和運費");
+      toast("請填寫重量和運費", "error");
       return;
     }
     setSaving(true);
@@ -82,7 +85,7 @@ export default function ShipmentsPage() {
       setForm({ forwarder: "", shipping_method: "海運", total_weight_kg: "", shipping_cost_ntd: "", customs_duty: "", notes: "" });
       fetchShipments();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "建立失敗");
+      toast(e instanceof Error ? e.message : "建立失敗", "error");
     } finally {
       setSaving(false);
     }
@@ -217,6 +220,8 @@ export default function ShipmentsPage() {
 }
 
 function ShipmentCard({ shipment: s, onRefresh }: { shipment: ConsolidatedShipment; onRefresh: () => void }) {
+  const { toast } = useToast();
+  const { confirm } = useConfirm();
   const [expanding, setExpanding] = useState(false);
   const statusColor = STATUS_COLORS[s.status || ""] || "bg-slate-100 text-slate-600";
   const costPerKg = s.total_weight_kg && s.total_cost_ntd
@@ -233,14 +238,20 @@ function ShipmentCard({ shipment: s, onRefresh }: { shipment: ConsolidatedShipme
   const advanceStatus = async () => {
     const next = nextStatus[s.status || ""];
     if (!next) return;
+    const ok = await confirm({
+      title: "推進集運狀態",
+      message: `確定將 ${s.shipment_number} 推進到「${next}」？`,
+      confirmText: `推進到「${next}」`,
+    });
+    if (!ok) return;
     const update: Record<string, string> = { status: next };
     if (next === "已到達") update.actual_arrival = new Date().toISOString().split("T")[0];
     const { error } = await getSupabase()
       .from("consolidated_shipments")
       .update(update)
       .eq("id", s.id);
-    if (error) alert(error.message);
-    else onRefresh();
+    if (error) toast(error.message, "error");
+    else { toast(`已推進到「${next}」`); onRefresh(); }
   };
 
   return (

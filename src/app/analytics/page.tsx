@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
 
 interface Stats {
@@ -21,6 +22,7 @@ interface Stats {
 }
 
 export default function AnalyticsPage() {
+  const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ export default function AnalyticsPage() {
         orderCount: (ordersRes.data || []).length,
       });
     } catch (e) {
-      alert(e instanceof Error ? e.message : "載入失敗");
+      toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
       setLoading(false);
     }

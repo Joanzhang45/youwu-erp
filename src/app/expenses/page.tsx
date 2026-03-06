@@ -3,11 +3,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
 import type { AdCost, OperatingExpense } from "@/lib/database.types";
 
 type Tab = "ads" | "operating";
 
 export default function ExpensesPage() {
+  const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("ads");
   const [ads, setAds] = useState<AdCost[]>([]);
   const [expenses, setExpenses] = useState<OperatingExpense[]>([]);
@@ -37,7 +39,7 @@ export default function ExpensesPage() {
       setAds(adsRes.data || []);
       setExpenses(expRes.data || []);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "載入失敗");
+      toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
       setLoading(false);
     }
@@ -110,7 +112,7 @@ export default function ExpensesPage() {
 
   const addExpense = async () => {
     if (!expenseForm.amount || !expenseForm.description) {
-      alert("請填寫金額和說明");
+      toast("請填寫金額和說明", "error");
       return;
     }
     setSaving(true);
@@ -127,7 +129,7 @@ export default function ExpensesPage() {
       setExpenseForm({ expense_date: new Date().toISOString().split("T")[0], category: "包材", description: "", amount: "", notes: "" });
       fetchData();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "新增失敗");
+      toast(e instanceof Error ? e.message : "新增失敗", "error");
     } finally {
       setSaving(false);
     }
