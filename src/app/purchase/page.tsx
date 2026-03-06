@@ -294,7 +294,7 @@ function POCard({ po }: { po: PurchaseOrder }) {
 
   return (
     <Link
-      href={`/purchase/${po.id}`}
+      href={`/purchase/detail?id=${po.id}`}
       className="block bg-white rounded-xl p-4 shadow-sm border border-slate-200 hover:border-slate-300 transition-all active:scale-[0.99]"
     >
       <div className="flex items-start justify-between gap-2 mb-2">

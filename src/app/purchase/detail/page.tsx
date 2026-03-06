@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import type { PurchaseOrder, PurchaseOrderItem } from "@/lib/database.types";
 
@@ -29,8 +29,16 @@ const STATUS_STEPS = [
 ] as const;
 
 export default function PurchaseDetailPage() {
-  const params = useParams();
-  const poId = Number(params.id);
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-400">載入中...</div>}>
+      <PurchaseDetailContent />
+    </Suspense>
+  );
+}
+
+function PurchaseDetailContent() {
+  const searchParams = useSearchParams();
+  const poId = Number(searchParams.get("id"));
 
   const [po, setPo] = useState<PurchaseOrder | null>(null);
   const [items, setItems] = useState<PurchaseOrderItem[]>([]);
