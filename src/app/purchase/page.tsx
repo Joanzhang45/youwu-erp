@@ -230,6 +230,16 @@ export default function PurchasePage() {
         </div>
       )}
 
+      {/* Quick Nav */}
+      <div className="px-4 py-2 bg-white border-b">
+        <Link
+          href="/purchase/shipments"
+          className="block w-full py-2 rounded-lg bg-amber-50 text-amber-700 text-sm font-medium border border-amber-200 text-center active:bg-amber-100"
+        >
+          📦 集運管理 &amp; 驗收入庫
+        </Link>
+      </div>
+
       {/* Filter Tabs */}
       <div className="flex gap-2 px-4 py-3 bg-white border-b overflow-x-auto">
         <FilterTab label={`全部 ${orders.length}`} active={filter === "all"} onClick={() => setFilter("all")} />
