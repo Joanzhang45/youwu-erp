@@ -4,8 +4,8 @@ const modules = [
   { href: "/inventory", label: "庫存管理", desc: "查看庫存、出入庫", icon: "📦", ready: true },
   { href: "/products", label: "商品資訊", desc: "商品與成本管理", icon: "🏷️", ready: true },
   { href: "/purchase", label: "採購管理", desc: "採購單、物流追蹤", icon: "🛒", ready: true },
-  { href: "/orders", label: "銷售訂單", desc: "蝦皮訂單匯入", icon: "📋", ready: false },
-  { href: "/expenses", label: "費用管理", desc: "廣告、營業費用", icon: "💰", ready: false },
+  { href: "/orders", label: "銷售訂單", desc: "蝦皮訂單匯入", icon: "📋", ready: true },
+  { href: "/expenses", label: "費用管理", desc: "廣告、營業費用", icon: "💰", ready: true },
   { href: "/analytics", label: "數據分析", desc: "毛利、庫存報表", icon: "📊", ready: false },
 ];
 
