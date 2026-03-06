@@ -20,6 +20,9 @@ type ItemWithReceiving = ConsolidatedShipmentItem & {
   actual_qty: number;
   condition: string;
   landed_cost_per_unit: number | null;
+  purchase_price_cny: number | null;
+  cost_before_shipping: number | null;
+  shipping_per_unit: number | null;
 };
 
 function ReceivingContent() {
@@ -46,14 +49,38 @@ function ReceivingContent() {
 
       setShipment(shipRes.data);
 
+      // Try to auto-load CNY rate from related PO
+      const { data: poData } = await getSupabase()
+        .from("purchase_orders")
+        .select("cny_rate")
+        .not("cny_rate", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (poData && poData.length > 0 && poData[0].cny_rate) {
+        setCnyRate(poData[0].cny_rate);
+      }
+
+      // Fetch product purchase prices for cost preview
+      const productIds = (itemsRes.data || []).map((i) => i.product_id).filter(Boolean);
+      const { data: prodData } = productIds.length > 0
+        ? await getSupabase().from("products").select("id, purchase_price_cny, weight_kg").in("id", productIds)
+        : { data: [] };
+      const prodMap = new Map((prodData || []).map((p) => [p.id, p]));
+
       // Map items with receiving fields
-      const mapped: ItemWithReceiving[] = (itemsRes.data || []).map((item) => ({
-        ...item,
-        expected_qty: item.qty || 0,
-        actual_qty: item.qty || 0,
-        condition: "良好",
-        landed_cost_per_unit: null,
-      }));
+      const mapped: ItemWithReceiving[] = (itemsRes.data || []).map((item) => {
+        const prod = prodMap.get(item.product_id);
+        return {
+          ...item,
+          expected_qty: item.qty || 0,
+          actual_qty: item.qty || 0,
+          condition: "良好",
+          landed_cost_per_unit: null,
+          purchase_price_cny: prod?.purchase_price_cny ?? null,
+          cost_before_shipping: null,
+          shipping_per_unit: null,
+        };
+      });
       setItems(mapped);
     } catch (e) {
       toast(e instanceof Error ? e.message : "載入失敗", "error");
@@ -75,17 +102,22 @@ function ReceivingContent() {
 
     setItems((prev) =>
       prev.map((item) => {
-        // We need to fetch product purchase price - for now use the data we have
-        // item comes from consolidated_shipment_items which doesn't have unit price
-        // We'll calculate shipping portion only and show it
+        const purchasePriceCny = Number(item.purchase_price_cny) || 0;
+        const costBeforeShipping = purchasePriceCny * cnyRate * (1 + cardFeeRate / 100);
         const itemWeight = Number(item.weight_kg) || 0;
-        const shippingPerUnit = item.actual_qty > 0
-          ? (itemWeight / totalWeight) * totalShipmentCost / item.actual_qty
+        const shippingPerUnit = totalWeight > 0
+          ? (itemWeight / totalWeight) * totalShipmentCost
           : 0;
-        return { ...item, landed_cost_per_unit: shippingPerUnit };
+        const landedCost = costBeforeShipping + shippingPerUnit;
+        return {
+          ...item,
+          cost_before_shipping: costBeforeShipping,
+          shipping_per_unit: shippingPerUnit,
+          landed_cost_per_unit: landedCost,
+        };
       })
     );
-  }, [shipment]);
+  }, [shipment, cnyRate, cardFeeRate]);
 
   useEffect(() => {
     if (shipment && items.length > 0) calcLandedCost();
@@ -333,10 +365,24 @@ function ReceivingContent() {
                 )}
 
                 {/* Cost Preview */}
-                <div className="bg-slate-50 rounded-lg p-2 text-[11px] text-slate-500">
+                <div className="bg-slate-50 rounded-lg p-2 text-[11px] text-slate-500 space-y-0.5">
+                  {item.purchase_price_cny != null && item.purchase_price_cny > 0 && (
+                    <div className="flex justify-between">
+                      <span>進價 x 匯率 x 手續費</span>
+                      <span className="text-slate-600">
+                        ¥{item.purchase_price_cny} x {cnyRate} x {(1 + cardFeeRate / 100).toFixed(3)} = ${item.cost_before_shipping?.toFixed(1) ?? "—"}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span>集運分攤（按重量）</span>
-                    <span className="font-medium text-slate-700">
+                    <span className="text-slate-600">
+                      ${item.shipping_per_unit != null ? item.shipping_per_unit.toFixed(1) : "—"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-0.5 border-t border-slate-200">
+                    <span className="font-medium text-slate-700">預估落地成本</span>
+                    <span className="font-bold text-slate-800">
                       ${item.landed_cost_per_unit != null ? item.landed_cost_per_unit.toFixed(2) : "—"} /件
                     </span>
                   </div>

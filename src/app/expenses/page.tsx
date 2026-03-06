@@ -4,12 +4,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
 import type { AdCost, OperatingExpense } from "@/lib/database.types";
 
 type Tab = "ads" | "operating";
 
 export default function ExpensesPage() {
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const [tab, setTab] = useState<Tab>("ads");
   const [ads, setAds] = useState<AdCost[]>([]);
   const [expenses, setExpenses] = useState<OperatingExpense[]>([]);
@@ -135,6 +137,24 @@ export default function ExpensesPage() {
     }
   };
 
+  const deleteAd = async (id: number) => {
+    const ok = await confirm({ title: "刪除廣告費用", message: "確定刪除此筆廣告費用？", confirmText: "刪除", danger: true });
+    if (!ok) return;
+    const { error } = await getSupabase().from("ad_costs").delete().eq("id", id);
+    if (error) { toast(error.message, "error"); return; }
+    toast("已刪除");
+    fetchData();
+  };
+
+  const deleteExpense = async (id: number) => {
+    const ok = await confirm({ title: "刪除營業費用", message: "確定刪除此筆營業費用？", confirmText: "刪除", danger: true });
+    if (!ok) return;
+    const { error } = await getSupabase().from("operating_expenses").delete().eq("id", id);
+    if (error) { toast(error.message, "error"); return; }
+    toast("已刪除");
+    fetchData();
+  };
+
   const totalAds = ads.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
@@ -200,12 +220,15 @@ export default function ExpensesPage() {
             ) : (
               <div className="space-y-1">
                 {ads.map((a) => (
-                  <div key={a.id} className="bg-white rounded-lg p-3 border border-slate-200 flex justify-between items-center">
-                    <div>
-                      <div className="text-sm">{a.description || "廣告費"}</div>
+                  <div key={a.id} className="bg-white rounded-lg p-3 border border-slate-200 flex justify-between items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm truncate">{a.description || "廣告費"}</div>
                       <div className="text-[11px] text-slate-400">{a.ad_date}</div>
                     </div>
-                    <div className="text-sm font-bold text-purple-700">${Number(a.amount).toLocaleString()}</div>
+                    <div className="text-sm font-bold text-purple-700 flex-shrink-0">${Number(a.amount).toLocaleString()}</div>
+                    <button onClick={() => deleteAd(a.id)} className="text-red-400 hover:text-red-600 text-xs flex-shrink-0 ml-1">
+                      刪除
+                    </button>
                   </div>
                 ))}
               </div>
@@ -281,15 +304,18 @@ export default function ExpensesPage() {
             ) : (
               <div className="space-y-1">
                 {expenses.map((e) => (
-                  <div key={e.id} className="bg-white rounded-lg p-3 border border-slate-200 flex justify-between items-center">
-                    <div>
-                      <div className="text-sm">{e.description}</div>
+                  <div key={e.id} className="bg-white rounded-lg p-3 border border-slate-200 flex justify-between items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm truncate">{e.description}</div>
                       <div className="flex gap-2 text-[11px] text-slate-400">
                         <span>{e.expense_date}</span>
                         <span className="px-1.5 py-0 bg-slate-100 rounded">{e.category}</span>
                       </div>
                     </div>
-                    <div className="text-sm font-bold text-slate-700">${Number(e.amount).toLocaleString()}</div>
+                    <div className="text-sm font-bold text-slate-700 flex-shrink-0">${Number(e.amount).toLocaleString()}</div>
+                    <button onClick={() => deleteExpense(e.id)} className="text-red-400 hover:text-red-600 text-xs flex-shrink-0 ml-1">
+                      刪除
+                    </button>
                   </div>
                 ))}
               </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
@@ -11,7 +11,9 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Partial<SalesOrder>[] | null>(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchOrders = useCallback(async () => {
@@ -38,9 +40,7 @@ export default function OrdersPage() {
     const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
     if (lines.length < 2) return [];
 
-    // Parse header - Shopee CSV uses various column names
     const headers = lines[0].split(",").map((h) => h.replace(/"/g, "").trim());
-
     const findCol = (keywords: string[]) =>
       headers.findIndex((h) => keywords.some((k) => h.includes(k)));
 
@@ -57,21 +57,14 @@ export default function OrdersPage() {
     const colPlatformCoupon = findCol(["蝦皮優惠券", "Shopee Voucher", "平台優惠券"]);
 
     const results: Partial<SalesOrder>[] = [];
-
     for (let i = 1; i < lines.length; i++) {
-      // Handle CSV with quoted fields
       const values: string[] = [];
       let current = "";
       let inQuotes = false;
       for (const char of lines[i]) {
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === "," && !inQuotes) {
-          values.push(current.trim());
-          current = "";
-        } else {
-          current += char;
-        }
+        if (char === '"') inQuotes = !inQuotes;
+        else if (char === "," && !inQuotes) { values.push(current.trim()); current = ""; }
+        else current += char;
       }
       values.push(current.trim());
 
@@ -99,7 +92,6 @@ export default function OrdersPage() {
       });
     }
 
-    // Calculate net_revenue for each order
     return results.map((o) => ({
       ...o,
       net_revenue: (o.order_amount || 0)
@@ -112,47 +104,61 @@ export default function OrdersPage() {
     }));
   };
 
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    setImporting(true);
-    setImportResult(null);
     try {
       const text = await file.text();
       const parsed = parseShopeeCSV(text);
       if (parsed.length === 0) {
-        setImportResult("無法解析 CSV，請確認格式是否正確");
+        toast("無法解析 CSV，請確認格式是否正確", "error");
         return;
       }
+      setPreview(parsed);
+    } catch {
+      toast("讀取檔案失敗", "error");
+    }
+  };
 
-      // Check for duplicates
+  const confirmImport = async () => {
+    if (!preview) return;
+    setImporting(true);
+    try {
       const existingNums = new Set(orders.map((o) => o.order_number));
-      const newOrders = parsed.filter((o) => !existingNums.has(o.order_number || ""));
+      const newOrders = preview.filter((o) => !existingNums.has(o.order_number || ""));
 
       if (newOrders.length === 0) {
-        setImportResult(`解析 ${parsed.length} 筆訂單，全部已存在，無需匯入`);
+        toast(`${preview.length} 筆訂單全部已存在，無需匯入`, "info");
+        setPreview(null);
         return;
       }
 
-      const { error } = await getSupabase()
-        .from("sales_orders")
-        .insert(newOrders);
+      const { error } = await getSupabase().from("sales_orders").insert(newOrders);
       if (error) throw error;
 
-      setImportResult(`成功匯入 ${newOrders.length} 筆新訂單（跳過 ${parsed.length - newOrders.length} 筆重複）`);
+      toast(`成功匯入 ${newOrders.length} 筆新訂單（跳過 ${preview.length - newOrders.length} 筆重複）`);
+      setPreview(null);
       fetchOrders();
     } catch (e) {
-      setImportResult(e instanceof Error ? e.message : "匯入失敗");
+      toast(e instanceof Error ? e.message : "匯入失敗", "error");
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   };
 
-  const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.order_amount) || 0), 0);
-  const totalNet = orders.reduce((sum, o) => sum + (Number(o.net_revenue) || 0), 0);
+  const filtered = useMemo(() => {
+    return orders.filter((o) => {
+      if (dateFrom && o.order_date && o.order_date < dateFrom) return false;
+      if (dateTo && o.order_date && o.order_date > dateTo) return false;
+      return true;
+    });
+  }, [orders, dateFrom, dateTo]);
+
+  const totalRevenue = filtered.reduce((sum, o) => sum + (Number(o.order_amount) || 0), 0);
+  const totalNet = filtered.reduce((sum, o) => sum + (Number(o.net_revenue) || 0), 0);
   const totalFees = totalRevenue - totalNet;
+  const hasDateFilter = dateFrom || dateTo;
 
   return (
     <div className="min-h-screen">
@@ -160,32 +166,101 @@ export default function OrdersPage() {
         <Link href="/" className="text-xl">&larr;</Link>
         <div className="flex-1">
           <h1 className="text-lg font-bold">銷售訂單</h1>
-          <p className="text-xs text-slate-300">共 {orders.length} 筆訂單</p>
+          <p className="text-xs text-slate-300">
+            {hasDateFilter ? `篩選 ${filtered.length} / ${orders.length} 筆` : `共 ${orders.length} 筆訂單`}
+          </p>
         </div>
       </header>
 
       {/* Import Section */}
       <div className="px-4 py-3 bg-white border-b">
         <label className="block w-full py-3 rounded-xl bg-blue-50 text-blue-700 text-sm font-medium border-2 border-dashed border-blue-300 text-center cursor-pointer hover:bg-blue-100 transition-colors">
-          {importing ? "匯入中..." : "拖曳或點擊匯入蝦皮訂單 CSV"}
+          {importing ? "匯入中..." : "點擊匯入蝦皮訂單 CSV"}
           <input
             ref={fileRef}
             type="file"
             accept=".csv"
-            onChange={handleImport}
+            onChange={handleFileSelect}
             className="hidden"
             disabled={importing}
           />
         </label>
-        {importResult && (
-          <p className={`text-xs mt-2 text-center ${importResult.includes("成功") ? "text-emerald-600" : "text-amber-600"}`}>
-            {importResult}
-          </p>
-        )}
       </div>
 
-      {/* Summary */}
+      {/* CSV Preview */}
+      {preview && (
+        <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
+          <h3 className="text-sm font-bold text-blue-800 mb-2">
+            預覽：解析到 {preview.length} 筆訂單
+          </h3>
+          <div className="max-h-48 overflow-y-auto space-y-1 mb-3">
+            {preview.slice(0, 20).map((o, i) => (
+              <div key={i} className="bg-white rounded-lg px-3 py-2 text-xs flex justify-between items-center border">
+                <div>
+                  <span className="font-mono font-medium">{o.order_number}</span>
+                  {o.order_date && <span className="text-slate-400 ml-2">{o.order_date}</span>}
+                </div>
+                <span className="font-medium">${Number(o.order_amount || 0).toLocaleString()}</span>
+              </div>
+            ))}
+            {preview.length > 20 && (
+              <div className="text-center text-xs text-slate-400 py-1">
+                ...還有 {preview.length - 20} 筆
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={confirmImport}
+              disabled={importing}
+              className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium active:bg-blue-700 disabled:opacity-50"
+            >
+              {importing ? "匯入中..." : `確認匯入 ${preview.length} 筆`}
+            </button>
+            <button
+              onClick={() => { setPreview(null); if (fileRef.current) fileRef.current.value = ""; }}
+              className="flex-1 py-2 rounded-lg bg-slate-200 text-slate-600 text-sm font-medium active:bg-slate-300"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Date Filter */}
       {orders.length > 0 && (
+        <div className="px-4 py-2 bg-white border-b">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-400 flex-shrink-0">日期</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="flex-1 px-2 py-1.5 border rounded text-xs outline-none focus:ring-2 focus:ring-blue-300"
+              placeholder="起"
+            />
+            <span className="text-slate-300">~</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="flex-1 px-2 py-1.5 border rounded text-xs outline-none focus:ring-2 focus:ring-blue-300"
+              placeholder="迄"
+            />
+            {hasDateFilter && (
+              <button
+                onClick={() => { setDateFrom(""); setDateTo(""); }}
+                className="text-xs text-slate-400 px-2 py-1"
+              >
+                清除
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Summary */}
+      {filtered.length > 0 && (
         <div className="px-4 py-3 bg-slate-50 border-b">
           <div className="grid grid-cols-3 gap-2 text-center">
             <div>
@@ -208,14 +283,18 @@ export default function OrdersPage() {
       <div className="px-4 py-2">
         {loading ? (
           <div className="text-center py-12 text-slate-400">載入中...</div>
-        ) : orders.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-slate-400 mb-2">尚無訂單資料</p>
-            <p className="text-xs text-slate-400">從蝦皮後台下載「訂單」CSV 後匯入</p>
+            <p className="text-slate-400 mb-2">
+              {orders.length === 0 ? "尚無訂單資料" : "此日期範圍無訂單"}
+            </p>
+            {orders.length === 0 && (
+              <p className="text-xs text-slate-400">從蝦皮後台下載「訂單」CSV 後匯入</p>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
-            {orders.map((o) => (
+            {filtered.map((o) => (
               <OrderCard key={o.id} order={o} />
             ))}
           </div>

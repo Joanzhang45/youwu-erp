@@ -26,7 +26,7 @@ export default function AnalyticsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState<"profit" | "margin" | "stock">("profit");
+  const [sortBy, setSortBy] = useState<"profit" | "margin" | "stock" | "total_profit">("profit");
 
   const fetchData = useCallback(async () => {
     try {
@@ -86,6 +86,8 @@ export default function AnalyticsPage() {
     return <div className="min-h-screen flex items-center justify-center text-slate-400">載入中...</div>;
   }
 
+  const hasData = stats && (stats.totalRevenue > 0 || stats.orderCount > 0 || stats.totalProducts > 0);
+
   // Product profitability ranking
   const rankedProducts = [...products]
     .map((p) => {
@@ -95,12 +97,15 @@ export default function AnalyticsPage() {
       const fees = revenue * (feeRate / 100);
       const profit = revenue - cost - fees;
       const margin = revenue > 0 ? profit / revenue : 0;
-      return { ...p, profit, margin, fees };
+      const sold = Number(p.total_sold_qty) || 0;
+      const totalProfit = profit * sold;
+      return { ...p, profit, margin, fees, totalProfit };
     })
     .filter((p) => p.selling_price && p.selling_price > 0)
     .sort((a, b) => {
       if (sortBy === "profit") return b.profit - a.profit;
       if (sortBy === "margin") return b.margin - a.margin;
+      if (sortBy === "total_profit") return b.totalProfit - a.totalProfit;
       return a.stock_qty - b.stock_qty;
     });
 
@@ -114,7 +119,19 @@ export default function AnalyticsPage() {
         </div>
       </header>
 
-      {stats && (
+      {stats && !hasData && (
+        <div className="text-center py-16 px-4">
+          <div className="text-4xl mb-3">📊</div>
+          <p className="text-slate-400 font-medium mb-1">尚無數據</p>
+          <p className="text-xs text-slate-400">匯入銷售訂單、建立採購單後，數據分析會自動計算</p>
+          <div className="flex gap-2 justify-center mt-4">
+            <Link href="/orders" className="text-xs px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200">匯入訂單</Link>
+            <Link href="/purchase" className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">建立採購單</Link>
+          </div>
+        </div>
+      )}
+
+      {stats && hasData && (
         <>
           {/* KPI Cards */}
           <div className="px-4 py-3 bg-white border-b">
@@ -177,7 +194,8 @@ export default function AnalyticsPage() {
           <h2 className="text-sm font-bold text-slate-700">商品損益排行</h2>
           <div className="flex gap-1">
             {[
-              { key: "profit" as const, label: "利潤" },
+              { key: "profit" as const, label: "單件利潤" },
+              { key: "total_profit" as const, label: "總利潤" },
               { key: "margin" as const, label: "毛利率" },
               { key: "stock" as const, label: "庫存" },
             ].map((s) => (
@@ -203,19 +221,20 @@ export default function AnalyticsPage() {
                   <div className="min-w-0 flex-1">
                     <h4 className="text-sm font-medium truncate">{p.product_name}</h4>
                     {p.variant_name && <p className="text-[10px] text-slate-400 truncate">{p.variant_name}</p>}
-                    <div className="flex gap-2 mt-1 text-[10px] text-slate-500">
+                    <div className="flex gap-2 mt-1 text-[10px] text-slate-500 flex-wrap">
                       <span>售 ${p.selling_price}</span>
                       <span>成本 ${Number(p.unit_cost_ntd || 0).toFixed(0)}</span>
                       <span>費用 ${p.fees.toFixed(0)}</span>
                       <span>庫存 {p.stock_qty}</span>
+                      {Number(p.total_sold_qty) > 0 && <span>已售 {p.total_sold_qty}</span>}
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <div className={`text-sm font-bold ${isNegative ? "text-red-500" : "text-emerald-600"}`}>
-                      ${p.profit.toFixed(0)}
+                      {sortBy === "total_profit" ? `$${p.totalProfit.toFixed(0)}` : `$${p.profit.toFixed(0)}`}
                     </div>
                     <div className={`text-[10px] ${p.margin >= 0.3 ? "text-emerald-500" : p.margin >= 0.15 ? "text-amber-500" : "text-red-500"}`}>
-                      {(p.margin * 100).toFixed(1)}%
+                      {sortBy === "total_profit" ? `${p.profit.toFixed(0)}/件` : `${(p.margin * 100).toFixed(1)}%`}
                     </div>
                   </div>
                 </div>
