@@ -6,7 +6,7 @@ const modules = [
   { href: "/purchase", label: "採購管理", desc: "採購單、物流追蹤", icon: "🛒", ready: true },
   { href: "/orders", label: "銷售訂單", desc: "蝦皮訂單匯入", icon: "📋", ready: true },
   { href: "/expenses", label: "費用管理", desc: "廣告、營業費用", icon: "💰", ready: true },
-  { href: "/analytics", label: "數據分析", desc: "毛利、庫存報表", icon: "📊", ready: false },
+  { href: "/analytics", label: "數據分析", desc: "毛利、庫存報表", icon: "📊", ready: true },
 ];
 
 export default function Home() {
