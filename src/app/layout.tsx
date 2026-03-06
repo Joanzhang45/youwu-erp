@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ClientLayout } from "@/components/ClientLayout";
 
 export const metadata: Metadata = {
   title: "有物製所 ERP",
@@ -23,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="zh-TW">
       <body className="bg-slate-50 text-slate-900 antialiased">
-        {children}
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );

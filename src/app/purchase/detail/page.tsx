@@ -200,7 +200,7 @@ function PurchaseDetailContent() {
     : [];
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen">
       {/* Header */}
       <header className="bg-slate-800 text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-30">
         <Link href="/purchase" className="text-xl">&larr;</Link>

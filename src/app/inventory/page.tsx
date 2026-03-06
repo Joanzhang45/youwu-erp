@@ -124,7 +124,7 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen">
       {/* Demo Banner */}
       {isDemo && (
         <div className="bg-amber-400 text-amber-900 text-xs text-center py-1 font-medium">

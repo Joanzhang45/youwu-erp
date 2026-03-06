@@ -39,7 +39,7 @@ export const DEMO_PRODUCTS = [
   },
   {
     id: 3, product_name: "分裝瓶", sku: "YW-分裝瓶00023-100ml透明",
-    category: "浴室區", variant_name: "100ml透明", selection_number: "00023",
+    category: "浴廁區", variant_name: "100ml透明", selection_number: "00023",
     shopee_spec_id: null, order_link: null, product_positioning: "引流款",
     product_image: null, notes: null, selling_price: 39, purchase_price_cny: 1.2,
     product_status: "穩定銷售", unit_cost_ntd: 12.5, platform_fee_rate: 0.145,
@@ -56,7 +56,7 @@ export const DEMO_PRODUCTS = [
   },
   {
     id: 4, product_name: "百摺衛生紙套", sku: "YW-百摺衛生紙套00067-米白",
-    category: "浴室區", variant_name: "米白", selection_number: "00067",
+    category: "浴廁區", variant_name: "米白", selection_number: "00067",
     shopee_spec_id: null, order_link: null, product_positioning: "一般款",
     product_image: null, notes: null, selling_price: 159, purchase_price_cny: 12,
     product_status: "穩定銷售", unit_cost_ntd: 78, platform_fee_rate: 0.145,
@@ -124,7 +124,7 @@ export const DEMO_PRODUCTS = [
   },
   {
     id: 8, product_name: "壁掛式置物架", sku: "YW-壁掛式置物架00052-白色",
-    category: "浴室區", variant_name: "白色", selection_number: "00052",
+    category: "浴廁區", variant_name: "白色", selection_number: "00052",
     shopee_spec_id: null, order_link: null, product_positioning: "一般款",
     product_image: null, notes: null, selling_price: 199, purchase_price_cny: 18,
     product_status: "穩定銷售", unit_cost_ntd: 110, platform_fee_rate: 0.145,
