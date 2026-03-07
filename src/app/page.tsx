@@ -7,7 +7,9 @@ import { getSupabase } from "@/lib/supabase";
 const modules = [
   { href: "/inventory", label: "庫存管理", desc: "查看庫存、出入庫", icon: "📦", statKey: "inventory" as const },
   { href: "/products", label: "商品資訊", desc: "商品與成本管理", icon: "🏷️", statKey: "products" as const },
+  { href: "/selections", label: "選品管理", desc: "選品評估、競品分析", icon: "🔍", statKey: "selections" as const },
   { href: "/purchase", label: "採購管理", desc: "採購單、物流追蹤", icon: "🛒", statKey: "purchase" as const },
+  { href: "/logistics", label: "境內物流", desc: "境內運送追蹤", icon: "🚚", statKey: "logistics" as const },
   { href: "/orders", label: "銷售訂單", desc: "蝦皮訂單匯入", icon: "📋", statKey: "orders" as const },
   { href: "/expenses", label: "費用管理", desc: "廣告、營業費用", icon: "💰", statKey: "expenses" as const },
   { href: "/analytics", label: "數據分析", desc: "毛利、庫存報表", icon: "📊", statKey: "analytics" as const },
@@ -16,7 +18,9 @@ const modules = [
 type QuickStats = {
   inventory: string | null;
   products: string | null;
+  selections: string | null;
   purchase: string | null;
+  logistics: string | null;
   orders: string | null;
   expenses: string | null;
   analytics: string | null;
@@ -27,12 +31,14 @@ export default function Home() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const [prodRes, poRes, ordersRes, adsRes, expRes] = await Promise.all([
+      const [prodRes, poRes, ordersRes, adsRes, expRes, selRes, logRes] = await Promise.all([
         getSupabase().from("products").select("stock_qty, safety_stock", { count: "exact" }),
         getSupabase().from("purchase_orders").select("status_received, status_cancelled", { count: "exact" }),
         getSupabase().from("sales_orders").select("id", { count: "exact" }),
         getSupabase().from("ad_costs").select("amount"),
         getSupabase().from("operating_expenses").select("amount"),
+        getSupabase().from("product_selections").select("status", { count: "exact" }),
+        getSupabase().from("domestic_logistics").select("status", { count: "exact" }),
       ]);
 
       const products = prodRes.data || [];
@@ -53,10 +59,18 @@ export default function Home() {
       if (outOfStock > 0) alerts.push(`${outOfStock} 缺貨`);
       if (lowStock > 0) alerts.push(`${lowStock} 低庫存`);
 
+      const sels = selRes.data || [];
+      const evalSels = sels.filter((s) => s.status === "評估中").length;
+
+      const logs = logRes.data || [];
+      const activeLogs = logs.filter((l) => l.status !== "已入倉" && l.status !== "已到達").length;
+
       setStats({
         inventory: alerts.length > 0 ? alerts.join("、") : `${products.length} 項正常`,
         products: `${products.length} 項商品`,
+        selections: evalSels > 0 ? `${evalSels} 筆評估中` : `共 ${sels.length} 筆`,
         purchase: activePOs > 0 ? `${activePOs} 單進行中` : `共 ${pos.length} 單`,
+        logistics: activeLogs > 0 ? `${activeLogs} 筆運送中` : `共 ${logs.length} 筆`,
         orders: `${orderCount} 筆訂單`,
         expenses: `$${(totalAds + totalExp).toLocaleString()}`,
         analytics: null,
