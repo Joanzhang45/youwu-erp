@@ -16,13 +16,26 @@ export default function OrdersPage() {
   const [dateTo, setDateTo] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
+      // Get total count
+      const { count } = await getSupabase()
+        .from("sales_orders")
+        .select("*", { count: "exact", head: true });
+      setTotalCount(count || 0);
+
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
       const { data, error } = await getSupabase()
         .from("sales_orders")
         .select("*")
-        .order("order_date", { ascending: false });
+        .order("order_date", { ascending: false })
+        .range(from, to);
       if (error) throw error;
       setOrders(data || []);
     } catch (e) {
@@ -30,11 +43,13 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const parseShopeeCSV = (text: string): Partial<SalesOrder>[] => {
     const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -167,7 +182,7 @@ export default function OrdersPage() {
         <div className="flex-1">
           <h1 className="text-lg font-bold">銷售訂單</h1>
           <p className="text-xs text-slate-300">
-            {hasDateFilter ? `篩選 ${filtered.length} / ${orders.length} 筆` : `共 ${orders.length} 筆訂單`}
+            {hasDateFilter ? `篩選 ${filtered.length} / ${orders.length} 筆` : `共 ${totalCount} 筆訂單（第 ${page + 1}/${totalPages} 頁）`}
           </p>
         </div>
       </header>
@@ -298,6 +313,27 @@ export default function OrdersPage() {
               <OrderCard key={o.id} order={o} />
             ))}
           </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 py-4">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="px-3 py-1.5 text-xs rounded-lg bg-slate-200 text-slate-600 disabled:opacity-30"
+              >
+                上一頁
+              </button>
+              <span className="text-xs text-slate-500">
+                {page + 1} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="px-3 py-1.5 text-xs rounded-lg bg-slate-200 text-slate-600 disabled:opacity-30"
+              >
+                下一頁
+              </button>
+            </div>
+          )}
         )}
       </div>
     </div>
