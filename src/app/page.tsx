@@ -60,10 +60,10 @@ export default function Home() {
       if (lowStock > 0) alerts.push(`${lowStock} 低庫存`);
 
       const sels = selRes.data || [];
-      const evalSels = sels.filter((s) => s.status === "評估中").length;
+      const evalSels = sels.filter((s) => s.status === "評估中" || s.status === "考慮中" || s.status === "測品").length;
 
       const logs = logRes.data || [];
-      const activeLogs = logs.filter((l) => l.status !== "已入倉" && l.status !== "已到達").length;
+      const activeLogs = logs.filter((l) => l.status !== "已入倉" && l.status !== "已到達" && !(l.status && l.status.includes("已入庫"))).length;
 
       setStats({
         inventory: alerts.length > 0 ? alerts.join("、") : `${products.length} 項正常`,

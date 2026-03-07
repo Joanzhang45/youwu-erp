@@ -13,6 +13,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   "運送中": { label: "運送中", color: "bg-amber-100 text-amber-700" },
   "已到達": { label: "已到達", color: "bg-emerald-100 text-emerald-700" },
   "已入倉": { label: "已入倉", color: "bg-purple-100 text-purple-700" },
+  "\uD83D\uDDC4\uFE0F 已入庫": { label: "已入庫", color: "bg-purple-100 text-purple-700" },
   "異常": { label: "異常", color: "bg-red-100 text-red-700" },
 };
 
@@ -63,13 +64,16 @@ export default function LogisticsPage() {
     fetchRecords();
   }, [fetchRecords]);
 
+  const isArrived = (s: string | null) => s === "已到達" || s === "已入倉" || (s != null && s.includes("已入庫"));
+  const isAbnormal = (s: string | null) => s === "異常";
+
   const filtered = records
     .filter((r) => {
       const matchFilter =
         filter === "all" ||
-        (filter === "active" && r.status !== "已入倉" && r.status !== "已到達" && r.status !== "異常") ||
-        (filter === "arrived" && (r.status === "已到達" || r.status === "已入倉")) ||
-        (filter === "abnormal" && r.status === "異常");
+        (filter === "active" && !isArrived(r.status) && !isAbnormal(r.status)) ||
+        (filter === "arrived" && isArrived(r.status)) ||
+        (filter === "abnormal" && isAbnormal(r.status));
       const matchSearch =
         !search ||
         r.tracking_number?.toLowerCase().includes(search.toLowerCase()) ||
@@ -161,8 +165,8 @@ export default function LogisticsPage() {
     }
   };
 
-  const activeCount = records.filter((r) => r.status !== "已入倉" && r.status !== "已到達" && r.status !== "異常").length;
-  const arrivedCount = records.filter((r) => r.status === "已到達" || r.status === "已入倉").length;
+  const activeCount = records.filter((r) => !isArrived(r.status) && !isAbnormal(r.status)).length;
+  const arrivedCount = records.filter((r) => isArrived(r.status)).length;
 
   if (error) {
     return (
