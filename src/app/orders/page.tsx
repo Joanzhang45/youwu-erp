@@ -169,7 +169,6 @@ export default function OrdersPage() {
         - Math.abs(o.transaction_fee || 0)
         - Math.abs(o.payment_processing_fee || 0)
         - Math.abs(o.extended_prep_fee || 0)
-        + (o.free_shipping_subsidy || 0)
         - Math.abs(o.seller_coupon || 0)
         - Math.abs(o.platform_coupon || 0),
     }));
@@ -452,8 +451,7 @@ function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
     + Math.abs(Number(o.payment_processing_fee) || 0)
     + Math.abs(Number(o.extended_prep_fee) || 0)
     + Math.abs(Number(o.seller_coupon) || 0)
-    + Math.abs(Number(o.platform_coupon) || 0)
-    - (Number(o.free_shipping_subsidy) || 0);
+    + Math.abs(Number(o.platform_coupon) || 0);
 
   const orderAmount = Number(o.order_amount) || 0;
   const netRevenue = Number(o.net_revenue) || 0;
@@ -501,13 +499,18 @@ function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
           <FeeRow label="成交手續費" value={o.transaction_fee} negative />
           <FeeRow label="活動/服務費" value={o.extended_prep_fee} negative />
           <FeeRow label="金流服務費" value={o.payment_processing_fee} negative />
-          <FeeRow label="免運補助" value={o.free_shipping_subsidy} />
           <FeeRow label="賣家優惠券" value={o.seller_coupon} negative />
           <FeeRow label="平台優惠券" value={o.platform_coupon} negative />
+          {(Number(o.free_shipping_subsidy) || 0) > 0 && (
+            <div className="flex justify-between text-slate-400">
+              <span>免運補助（蝦皮出）</span>
+              <span>${Number(o.free_shipping_subsidy).toLocaleString()}</span>
+            </div>
+          )}
           <div className="flex justify-between pt-1 border-t text-xs font-medium">
             <FormulaLabel
               label="平台費用小計"
-              formula={`成交手續費 + 金流服務費 + 活動服務費\n+ 賣家優惠券 + 平台優惠券 - 免運補助\n= $${fees.toLocaleString()}`}
+              formula={`成交手續費 + 金流服務費 + 活動服務費\n+ 賣家優惠券 + 平台優惠券\n= $${fees.toLocaleString()}\n\n※ 免運補助是蝦皮補貼給物流的運費，不影響賣家收入`}
             />
             <span className="text-red-500">-${fees.toLocaleString()}</span>
           </div>
