@@ -34,6 +34,36 @@ const POSITIONING_LABELS: Record<string, { label: string; color: string }> = {
 type SortKey = "product_name" | "selling_price" | "stock_qty" | "unit_cost_ntd" | "gross_margin";
 type SortDir = "asc" | "desc";
 
+function exportCSV(products: Product[]) {
+  const headers = ["商品名稱","款式","SKU","分類","狀態","定位","售價","進貨價CNY","成本NTD","庫存","安全庫存","已售數量","總營收","毛利率","備註"];
+  const rows = products.map(p => [
+    p.product_name,
+    p.variant_name || "",
+    p.sku || "",
+    p.category || "",
+    p.product_status || "",
+    p.product_positioning || "",
+    p.selling_price ?? "",
+    p.purchase_price_cny ?? "",
+    p.unit_cost_ntd ?? "",
+    p.stock_qty ?? 0,
+    p.safety_stock ?? "",
+    p.total_sold_qty ?? 0,
+    p.total_sales_revenue ?? 0,
+    p.gross_margin != null ? (p.gross_margin * 100).toFixed(1) + "%" : "",
+    p.notes || "",
+  ]);
+  const BOM = "\uFEFF";
+  const csv = BOM + [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `商品資料_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function ProductsPage() {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -201,6 +231,12 @@ export default function ProductsPage() {
           <h1 className="text-lg font-bold">商品資訊</h1>
           <p className="text-xs text-slate-300">共 {products.length} 項商品</p>
         </div>
+        <button
+          onClick={() => exportCSV(filtered)}
+          className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600"
+        >
+          CSV
+        </button>
         <button
           onClick={() => setShowAdd(!showAdd)}
           className="w-9 h-9 rounded-full bg-blue-500 text-white text-xl font-bold flex items-center justify-center hover:bg-blue-600 active:scale-95 transition-all"

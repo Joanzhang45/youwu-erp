@@ -6,6 +6,33 @@ import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import type { SalesOrder } from "@/lib/database.types";
 
+function exportOrdersCSV(orders: SalesOrder[]) {
+  const headers = ["訂單編號","日期","買家","訂單金額","淨營收","狀態","成交手續費","金流服務費","服務費","免運補助","賣家優惠券","平台優惠券"];
+  const rows = orders.map(o => [
+    o.order_number,
+    o.order_date || "",
+    o.buyer_name || "",
+    o.order_amount ?? 0,
+    o.net_revenue ?? 0,
+    o.status || "",
+    o.transaction_fee ?? 0,
+    o.payment_processing_fee ?? 0,
+    o.extended_prep_fee ?? 0,
+    o.free_shipping_subsidy ?? 0,
+    o.seller_coupon ?? 0,
+    o.platform_coupon ?? 0,
+  ]);
+  const BOM = "\uFEFF";
+  const csv = BOM + [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `訂單資料_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function OrdersPage() {
   const { toast } = useToast();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
@@ -185,6 +212,12 @@ export default function OrdersPage() {
             {hasDateFilter ? `篩選 ${filtered.length} / ${orders.length} 筆` : `共 ${totalCount} 筆訂單（第 ${page + 1}/${totalPages} 頁）`}
           </p>
         </div>
+        <button
+          onClick={() => exportOrdersCSV(filtered)}
+          className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600"
+        >
+          CSV
+        </button>
       </header>
 
       {/* Import Section */}
@@ -308,32 +341,34 @@ export default function OrdersPage() {
             )}
           </div>
         ) : (
-          <div className="space-y-2">
-            {filtered.map((o) => (
-              <OrderCard key={o.id} order={o} />
-            ))}
-          </div>
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-3 py-4">
-              <button
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="px-3 py-1.5 text-xs rounded-lg bg-slate-200 text-slate-600 disabled:opacity-30"
-              >
-                上一頁
-              </button>
-              <span className="text-xs text-slate-500">
-                {page + 1} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="px-3 py-1.5 text-xs rounded-lg bg-slate-200 text-slate-600 disabled:opacity-30"
-              >
-                下一頁
-              </button>
+          <>
+            <div className="space-y-2">
+              {filtered.map((o) => (
+                <OrderCard key={o.id} order={o} />
+              ))}
             </div>
-          )}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 py-4">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-slate-200 text-slate-600 disabled:opacity-30"
+                >
+                  上一頁
+                </button>
+                <span className="text-xs text-slate-500">
+                  {page + 1} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-slate-200 text-slate-600 disabled:opacity-30"
+                >
+                  下一頁
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
