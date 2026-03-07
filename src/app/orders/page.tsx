@@ -416,6 +416,36 @@ export default function OrdersPage() {
   );
 }
 
+function FormulaPopup({ label, formula, onClose }: { label: string; formula: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-6" onClick={onClose}>
+      <div className="bg-white rounded-xl p-4 max-w-sm w-full shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-sm font-bold text-slate-700 mb-2">{label}</h3>
+        <pre className="text-xs text-slate-600 whitespace-pre-wrap bg-slate-50 rounded-lg p-3 leading-relaxed">{formula}</pre>
+        <button onClick={onClose} className="mt-3 w-full py-2 rounded-lg bg-slate-200 text-slate-600 text-sm font-medium">關閉</button>
+      </div>
+    </div>
+  );
+}
+
+function FormulaLabel({ label, formula }: { label: string; formula: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <>
+      <span className="text-slate-600">
+        {label}
+        <button
+          onClick={(e) => { e.stopPropagation(); setShow(true); }}
+          className="inline-flex items-center justify-center w-3.5 h-3.5 ml-1 rounded-full bg-slate-200 text-slate-400 text-[9px] leading-none hover:bg-slate-300"
+        >
+          ?
+        </button>
+      </span>
+      {show && <FormulaPopup label={label} formula={formula} onClose={() => setShow(false)} />}
+    </>
+  );
+}
+
 function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
   const [expanded, setExpanded] = useState(false);
   const fees = Math.abs(Number(o.transaction_fee) || 0)
@@ -448,7 +478,7 @@ function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
           <div className={`text-[10px] ${profit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
             利潤 ${profit.toLocaleString()}
           </div>
-          <div className={`text-[10px] ${marginRate >= 20 ? "text-emerald-500" : marginRate >= 0 ? "text-amber-500" : "text-red-500"}`}>
+          <div className={`text-[10px] ${marginRate >= 40 ? "text-emerald-500" : "text-red-500"}`}>
             毛利率 {marginRate.toFixed(1)}%
           </div>
         </div>
@@ -475,17 +505,42 @@ function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
           <FeeRow label="賣家優惠券" value={o.seller_coupon} negative />
           <FeeRow label="平台優惠券" value={o.platform_coupon} negative />
           <div className="flex justify-between pt-1 border-t text-xs font-medium">
-            <span className="text-slate-600">平台費用小計</span>
+            <FormulaLabel
+              label="平台費用小計"
+              formula={`成交手續費 + 金流服務費 + 活動服務費\n+ 賣家優惠券 + 平台優惠券 - 免運補助\n= $${fees.toLocaleString()}`}
+            />
             <span className="text-red-500">-${fees.toLocaleString()}</span>
           </div>
           <div className="flex justify-between text-xs font-medium">
-            <span className="text-slate-600">商品成本</span>
+            <FormulaLabel
+              label="淨營收"
+              formula={`訂單金額 - 平台費用小計\n= $${orderAmount.toLocaleString()} - $${fees.toLocaleString()}\n= $${netRevenue.toLocaleString()}`}
+            />
+            <span className="text-blue-600">${netRevenue.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-xs font-medium">
+            <FormulaLabel
+              label="商品成本"
+              formula={`各品項的（單品落地成本 × 數量）加總\n= $${cogs.toLocaleString()}`}
+            />
             <span className="text-amber-600">-${cogs.toLocaleString()}</span>
           </div>
           <div className="flex justify-between pt-1 border-t text-xs font-bold">
-            <span className="text-slate-700">訂單毛利</span>
+            <FormulaLabel
+              label="訂單毛利"
+              formula={`淨營收 - 商品成本\n= $${netRevenue.toLocaleString()} - $${cogs.toLocaleString()}\n= $${profit.toLocaleString()}`}
+            />
             <span className={profit >= 0 ? "text-emerald-600" : "text-red-500"}>
-              ${profit.toLocaleString()} ({marginRate.toFixed(1)}%)
+              ${profit.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex justify-between text-xs font-bold">
+            <FormulaLabel
+              label="毛利率"
+              formula={`訂單毛利 ÷ 訂單金額 × 100%\n= $${profit.toLocaleString()} ÷ $${orderAmount.toLocaleString()} × 100%\n= ${marginRate.toFixed(1)}%\n\n（已扣除所有平台費用 + 商品成本）`}
+            />
+            <span className={marginRate >= 40 ? "text-emerald-600" : "text-red-500"}>
+              {marginRate.toFixed(1)}%
             </span>
           </div>
         </div>
