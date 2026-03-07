@@ -209,6 +209,16 @@ export default function ProductsPage() {
         </button>
       </header>
 
+      {/* Quick Nav */}
+      <div className="px-4 py-2 bg-white border-b">
+        <Link
+          href="/products/mapping"
+          className="block w-full py-2 rounded-lg bg-amber-50 text-amber-700 text-sm font-medium border border-amber-200 text-center active:bg-amber-100"
+        >
+          🔗 蝦皮商品對應 (訂單 → 商品主檔)
+        </Link>
+      </div>
+
       {/* Add Product Form */}
       {showAdd && (
         <div className="bg-blue-50 border-b border-blue-200 px-4 py-4 space-y-3">
