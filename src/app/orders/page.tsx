@@ -46,6 +46,7 @@ export default function OrdersPage() {
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [orderCOGS, setOrderCOGS] = useState<Record<number, number>>({});
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -65,6 +66,34 @@ export default function OrdersPage() {
         .range(from, to);
       if (error) throw error;
       setOrders(data || []);
+
+      // Fetch order items + product costs for COGS calculation
+      if (data && data.length > 0) {
+        const orderIds = data.map((o) => o.id);
+        const { data: items } = await getSupabase()
+          .from("sales_order_items")
+          .select("order_id, product_id, qty")
+          .in("order_id", orderIds);
+
+        if (items && items.length > 0) {
+          const productIds = [...new Set(items.map((i) => i.product_id).filter(Boolean))];
+          const { data: products } = await getSupabase()
+            .from("products")
+            .select("id, unit_cost_ntd")
+            .in("id", productIds);
+
+          const costMap: Record<number, number> = {};
+          (products || []).forEach((p) => { costMap[p.id] = Number(p.unit_cost_ntd) || 0; });
+
+          const cogsByOrder: Record<number, number> = {};
+          items.forEach((item) => {
+            if (!item.order_id) return;
+            const cost = item.product_id ? (costMap[item.product_id] || 0) : 0;
+            cogsByOrder[item.order_id] = (cogsByOrder[item.order_id] || 0) + cost * (Number(item.qty) || 1);
+          });
+          setOrderCOGS(cogsByOrder);
+        }
+      }
     } catch (e) {
       toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
@@ -200,6 +229,8 @@ export default function OrdersPage() {
   const totalRevenue = filtered.reduce((sum, o) => sum + (Number(o.order_amount) || 0), 0);
   const totalNet = filtered.reduce((sum, o) => sum + (Number(o.net_revenue) || 0), 0);
   const totalFees = totalRevenue - totalNet;
+  const totalCOGS = filtered.reduce((sum, o) => sum + (orderCOGS[o.id] || 0), 0);
+  const totalProfit = totalNet - totalCOGS;
   const hasDateFilter = dateFrom || dateTo;
 
   return (
@@ -309,19 +340,29 @@ export default function OrdersPage() {
 
       {/* Summary */}
       {filtered.length > 0 && (
-        <div className="px-4 py-3 bg-slate-50 border-b">
-          <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="px-4 py-3 bg-slate-50 border-b space-y-2">
+          <div className="grid grid-cols-4 gap-2 text-center">
             <div>
               <div className="text-[11px] text-slate-400">總營收</div>
               <div className="text-sm font-bold text-slate-800">${totalRevenue.toLocaleString()}</div>
             </div>
             <div>
-              <div className="text-[11px] text-slate-400">總費用</div>
+              <div className="text-[11px] text-slate-400">平台費用</div>
               <div className="text-sm font-bold text-red-500">-${Math.abs(totalFees).toLocaleString()}</div>
             </div>
             <div>
               <div className="text-[11px] text-slate-400">淨營收</div>
-              <div className="text-sm font-bold text-emerald-600">${totalNet.toLocaleString()}</div>
+              <div className="text-sm font-bold text-blue-600">${totalNet.toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-slate-400">商品成本</div>
+              <div className="text-sm font-bold text-amber-600">-${totalCOGS.toLocaleString()}</div>
+            </div>
+          </div>
+          <div className="text-center py-1.5 rounded-lg bg-white border">
+            <div className="text-[11px] text-slate-400">淨利潤（淨營收 - 商品成本）</div>
+            <div className={`text-lg font-bold ${totalProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+              ${totalProfit.toLocaleString()}
             </div>
           </div>
         </div>
@@ -344,7 +385,7 @@ export default function OrdersPage() {
           <>
             <div className="space-y-2">
               {filtered.map((o) => (
-                <OrderCard key={o.id} order={o} />
+                <OrderCard key={o.id} order={o} cogs={orderCOGS[o.id] || 0} />
               ))}
             </div>
             {totalPages > 1 && (
@@ -375,7 +416,7 @@ export default function OrdersPage() {
   );
 }
 
-function OrderCard({ order: o }: { order: SalesOrder }) {
+function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
   const [expanded, setExpanded] = useState(false);
   const fees = Math.abs(Number(o.transaction_fee) || 0)
     + Math.abs(Number(o.payment_processing_fee) || 0)
@@ -399,8 +440,8 @@ function OrderCard({ order: o }: { order: SalesOrder }) {
         </div>
         <div className="text-right flex-shrink-0">
           <div className="text-sm font-bold">${Number(o.order_amount || 0).toLocaleString()}</div>
-          <div className="text-[10px] text-emerald-600">
-            淨 ${Number(o.net_revenue || 0).toLocaleString()}
+          <div className={`text-[10px] ${(Number(o.net_revenue || 0) - cogs) >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+            利潤 ${(Number(o.net_revenue || 0) - cogs).toLocaleString()}
           </div>
         </div>
       </div>
