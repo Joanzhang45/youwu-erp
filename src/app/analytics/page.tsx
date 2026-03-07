@@ -23,6 +23,31 @@ interface Stats {
 
 type Period = "all" | "month" | "week";
 
+function exportAnalyticsCSV(products: { product_name: string; variant_name?: string | null; selling_price: number | null; unit_cost_ntd: number | null; fees: number; profit: number; margin: number; totalProfit: number; stock_qty: number; total_sold_qty: number | null }[]) {
+  const headers = ["商品名稱","款式","售價","成本","平台費","單件利潤","毛利率","已售","總利潤","庫存"];
+  const rows = products.map(p => [
+    p.product_name,
+    p.variant_name || "",
+    p.selling_price ?? 0,
+    p.unit_cost_ntd ?? 0,
+    p.fees.toFixed(0),
+    p.profit.toFixed(0),
+    (p.margin * 100).toFixed(1) + "%",
+    p.total_sold_qty ?? 0,
+    p.totalProfit.toFixed(0),
+    p.stock_qty,
+  ]);
+  const BOM = "\uFEFF";
+  const csv = BOM + [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `商品損益_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function getPeriodRange(period: Period): { from: string; to: string } | null {
   if (period === "all") return null;
   const now = new Date();
@@ -250,7 +275,15 @@ export default function AnalyticsPage() {
       {/* Product Profitability Table */}
       <div className="px-4 py-3">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-bold text-slate-700">商品損益排行</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-slate-700">商品損益排行</h2>
+            <button
+              onClick={() => exportAnalyticsCSV(rankedProducts)}
+              className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-500 hover:bg-slate-300"
+            >
+              CSV
+            </button>
+          </div>
           <div className="flex gap-1">
             {[
               { key: "profit" as const, label: "單件利潤" },
