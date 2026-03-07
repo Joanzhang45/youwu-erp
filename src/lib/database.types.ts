@@ -295,6 +295,8 @@ export interface OperatingExpense {
   id: number
   expense_date: string | null
   category: string | null
+  item_name: string | null
+  quantity: number | null
   description: string | null
   amount: number | null
   notes: string | null
