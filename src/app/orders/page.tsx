@@ -425,6 +425,11 @@ function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
     + Math.abs(Number(o.platform_coupon) || 0)
     - (Number(o.free_shipping_subsidy) || 0);
 
+  const orderAmount = Number(o.order_amount) || 0;
+  const netRevenue = Number(o.net_revenue) || 0;
+  const profit = netRevenue - cogs;
+  const marginRate = orderAmount > 0 ? (profit / orderAmount * 100) : 0;
+
   return (
     <div
       className="bg-white rounded-xl p-3 shadow-sm border border-slate-200 cursor-pointer"
@@ -439,9 +444,12 @@ function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <div className="text-sm font-bold">${Number(o.order_amount || 0).toLocaleString()}</div>
-          <div className={`text-[10px] ${(Number(o.net_revenue || 0) - cogs) >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-            利潤 ${(Number(o.net_revenue || 0) - cogs).toLocaleString()}
+          <div className="text-sm font-bold">${orderAmount.toLocaleString()}</div>
+          <div className={`text-[10px] ${profit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+            利潤 ${profit.toLocaleString()}
+          </div>
+          <div className={`text-[10px] ${marginRate >= 20 ? "text-emerald-500" : marginRate >= 0 ? "text-amber-500" : "text-red-500"}`}>
+            毛利率 {marginRate.toFixed(1)}%
           </div>
         </div>
       </div>
@@ -467,8 +475,18 @@ function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
           <FeeRow label="賣家優惠券" value={o.seller_coupon} negative />
           <FeeRow label="平台優惠券" value={o.platform_coupon} negative />
           <div className="flex justify-between pt-1 border-t text-xs font-medium">
-            <span className="text-slate-600">總扣款</span>
+            <span className="text-slate-600">平台費用小計</span>
             <span className="text-red-500">-${fees.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-xs font-medium">
+            <span className="text-slate-600">商品成本</span>
+            <span className="text-amber-600">-${cogs.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between pt-1 border-t text-xs font-bold">
+            <span className="text-slate-700">訂單毛利</span>
+            <span className={profit >= 0 ? "text-emerald-600" : "text-red-500"}>
+              ${profit.toLocaleString()} ({marginRate.toFixed(1)}%)
+            </span>
           </div>
         </div>
       )}
