@@ -8,9 +8,13 @@ import type { ProductSelection } from "@/lib/database.types";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   "評估中": { label: "評估中", color: "bg-blue-100 text-blue-700" },
+  "考慮中": { label: "考慮中", color: "bg-blue-100 text-blue-700" },
+  "測品": { label: "測品", color: "bg-amber-100 text-amber-700" },
   "已通過": { label: "已通過", color: "bg-emerald-100 text-emerald-700" },
+  "預購": { label: "預購", color: "bg-emerald-100 text-emerald-700" },
+  "已下單": { label: "已下單", color: "bg-emerald-100 text-emerald-700" },
   "已放棄": { label: "已放棄", color: "bg-slate-100 text-slate-500" },
-  "已下單": { label: "已下單", color: "bg-amber-100 text-amber-700" },
+  "不進貨": { label: "不進貨", color: "bg-slate-100 text-slate-500" },
 };
 
 const CATEGORIES = [
@@ -60,13 +64,17 @@ export default function SelectionsPage() {
     fetchSelections();
   }, [fetchSelections]);
 
+  const isEvaluating = (s: string | null) => s === "評估中" || s === "考慮中" || s === "測品";
+  const isPassed = (s: string | null) => s === "已通過" || s === "已下單" || s === "預購";
+  const isAbandoned = (s: string | null) => s === "已放棄" || s === "不進貨";
+
   const filtered = selections
     .filter((s) => {
       const matchFilter =
         filter === "all" ||
-        (filter === "evaluating" && s.status === "評估中") ||
-        (filter === "passed" && (s.status === "已通過" || s.status === "已下單")) ||
-        (filter === "abandoned" && s.status === "已放棄");
+        (filter === "evaluating" && isEvaluating(s.status)) ||
+        (filter === "passed" && isPassed(s.status)) ||
+        (filter === "abandoned" && isAbandoned(s.status));
       const matchSearch =
         !search ||
         s.product_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -116,8 +124,8 @@ export default function SelectionsPage() {
     }
   };
 
-  const evalCount = selections.filter((s) => s.status === "評估中").length;
-  const passedCount = selections.filter((s) => s.status === "已通過" || s.status === "已下單").length;
+  const evalCount = selections.filter((s) => isEvaluating(s.status)).length;
+  const passedCount = selections.filter((s) => isPassed(s.status)).length;
 
   if (error) {
     return (

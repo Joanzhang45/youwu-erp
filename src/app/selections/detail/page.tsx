@@ -8,7 +8,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import type { ProductSelection, ProductVariant, CompetitorProduct } from "@/lib/database.types";
 
-const STATUS_OPTIONS = ["評估中", "已通過", "已放棄", "已下單"];
+const STATUS_OPTIONS = ["考慮中", "測品", "預購", "已下單", "已通過", "不進貨", "已放棄"];
 
 export default function SelectionDetailPage() {
   return (
