@@ -21,56 +21,50 @@ interface Stats {
   orderCount: number;
 }
 
+type Period = "all" | "month" | "week";
+
+function getPeriodRange(period: Period): { from: string; to: string } | null {
+  if (period === "all") return null;
+  const now = new Date();
+  const to = now.toISOString().slice(0, 10);
+  if (period === "month") {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    return { from, to };
+  }
+  // week: Monday of current week
+  const day = now.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - diff);
+  return { from: monday.toISOString().slice(0, 10), to };
+}
+
 export default function AnalyticsPage() {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
+  const [allOrders, setAllOrders] = useState<{ order_date: string | null; order_amount: number | null; net_revenue: number | null }[]>([]);
+  const [allAds, setAllAds] = useState<{ amount: number | null; date: string | null }[]>([]);
+  const [allExpenses, setAllExpenses] = useState<{ amount: number | null; date: string | null }[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<"profit" | "margin" | "stock" | "total_profit">("profit");
+  const [period, setPeriod] = useState<Period>("all");
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [prodRes, ordersRes, adsRes, expRes] = await Promise.all([
         getSupabase().from("products").select("*").order("product_name"),
-        getSupabase().from("sales_orders").select("order_amount, net_revenue"),
-        getSupabase().from("ad_costs").select("amount"),
-        getSupabase().from("operating_expenses").select("amount"),
+        getSupabase().from("sales_orders").select("order_date, order_amount, net_revenue"),
+        getSupabase().from("ad_costs").select("amount, date"),
+        getSupabase().from("operating_expenses").select("amount, date"),
       ]);
 
       const prods: Product[] = prodRes.data || [];
       setProducts(prods);
-
-      const totalRevenue = (ordersRes.data || []).reduce((s, o) => s + (Number(o.order_amount) || 0), 0);
-      const totalNetRevenue = (ordersRes.data || []).reduce((s, o) => s + (Number(o.net_revenue) || 0), 0);
-      const totalAdCost = (adsRes.data || []).reduce((s, a) => s + (Number(a.amount) || 0), 0);
-      const totalExpenses = (expRes.data || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
-
-      // COGS = sum of (unit_cost_ntd * total_sold_qty) for each product
-      const totalCOGS = prods.reduce((s, p) => {
-        const cost = Number(p.unit_cost_ntd) || 0;
-        const sold = Number(p.total_sold_qty) || 0;
-        return s + cost * sold;
-      }, 0);
-
-      const grossProfit = totalNetRevenue - totalCOGS;
-      const netProfit = grossProfit - totalAdCost - totalExpenses;
-      const poas = totalAdCost > 0 ? netProfit / totalAdCost : null;
-
-      setStats({
-        totalProducts: prods.length,
-        totalRevenue,
-        totalNetRevenue,
-        totalAdCost,
-        totalExpenses,
-        totalCOGS,
-        grossProfit,
-        netProfit,
-        poas,
-        lowStockCount: prods.filter((p) => p.safety_stock != null && p.stock_qty > 0 && p.stock_qty <= p.safety_stock).length,
-        outOfStockCount: prods.filter((p) => p.stock_qty <= 0).length,
-        orderCount: (ordersRes.data || []).length,
-      });
+      setAllOrders(ordersRes.data || []);
+      setAllAds(adsRes.data || []);
+      setAllExpenses(expRes.data || []);
     } catch (e) {
       toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
@@ -81,6 +75,50 @@ export default function AnalyticsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Recalculate stats whenever period or raw data changes
+  useEffect(() => {
+    if (loading) return;
+    const range = getPeriodRange(period);
+    const inRange = (dateStr: string | null) => {
+      if (!range) return true;
+      if (!dateStr) return false;
+      return dateStr >= range.from && dateStr <= range.to;
+    };
+
+    const filteredOrders = allOrders.filter((o) => inRange(o.order_date));
+    const filteredAds = allAds.filter((a) => inRange(a.date));
+    const filteredExpenses = allExpenses.filter((e) => inRange(e.date));
+
+    const totalRevenue = filteredOrders.reduce((s, o) => s + (Number(o.order_amount) || 0), 0);
+    const totalNetRevenue = filteredOrders.reduce((s, o) => s + (Number(o.net_revenue) || 0), 0);
+    const totalAdCost = filteredAds.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    const totalExpensesAmt = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+    // COGS: when filtered, we can't split by period (product stats are cumulative), so use all-time
+    const totalCOGS = period === "all"
+      ? products.reduce((s, p) => s + (Number(p.unit_cost_ntd) || 0) * (Number(p.total_sold_qty) || 0), 0)
+      : 0; // For period views, COGS not available (would need order-item level data)
+
+    const grossProfit = totalNetRevenue - totalCOGS;
+    const netProfit = grossProfit - totalAdCost - totalExpensesAmt;
+    const poas = totalAdCost > 0 ? netProfit / totalAdCost : null;
+
+    setStats({
+      totalProducts: products.length,
+      totalRevenue,
+      totalNetRevenue,
+      totalAdCost,
+      totalExpenses: totalExpensesAmt,
+      totalCOGS,
+      grossProfit,
+      netProfit,
+      poas,
+      lowStockCount: products.filter((p) => p.safety_stock != null && p.stock_qty > 0 && p.stock_qty <= p.safety_stock).length,
+      outOfStockCount: products.filter((p) => p.stock_qty <= 0).length,
+      orderCount: filteredOrders.length,
+    });
+  }, [period, products, allOrders, allAds, allExpenses, loading]);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-slate-400">載入中...</div>;
@@ -111,11 +149,32 @@ export default function AnalyticsPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="bg-slate-800 text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-30">
-        <Link href="/" className="text-xl">&larr;</Link>
-        <div>
-          <h1 className="text-lg font-bold">數據分析</h1>
-          <p className="text-xs text-slate-300">戰情總覽</p>
+      <header className="bg-slate-800 text-white px-4 py-3 sticky top-0 z-30">
+        <div className="flex items-center gap-3">
+          <Link href="/" className="text-xl">&larr;</Link>
+          <div className="flex-1">
+            <h1 className="text-lg font-bold">數據分析</h1>
+            <p className="text-xs text-slate-300">戰情總覽</p>
+          </div>
+        </div>
+        <div className="flex gap-1 mt-2">
+          {([
+            { key: "all" as Period, label: "全部" },
+            { key: "month" as Period, label: "本月" },
+            { key: "week" as Period, label: "本週" },
+          ]).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setPeriod(t.key)}
+              className={`text-xs px-3 py-1 rounded-full ${
+                period === t.key
+                  ? "bg-white text-slate-800 font-medium"
+                  : "bg-slate-700 text-slate-300"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
       </header>
 
@@ -138,7 +197,7 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-2 gap-3">
               <KPICard label="總營收" value={`$${stats.totalRevenue.toLocaleString()}`} sub={`${stats.orderCount} 筆訂單`} />
               <KPICard label="淨營收" value={`$${stats.totalNetRevenue.toLocaleString()}`} sub="扣除平台費用" color="blue" />
-              <KPICard label="銷貨成本" value={`$${stats.totalCOGS.toLocaleString()}`} sub="落地成本 x 銷量" color="amber" />
+              <KPICard label="銷貨成本" value={period === "all" ? `$${stats.totalCOGS.toLocaleString()}` : "—"} sub={period === "all" ? "落地成本 x 銷量" : "僅全部檢視可用"} color="amber" />
               <KPICard label="毛利" value={`$${stats.grossProfit.toLocaleString()}`}
                 sub={stats.totalNetRevenue > 0 ? `毛利率 ${(stats.grossProfit / stats.totalNetRevenue * 100).toFixed(1)}%` : ""}
                 color={stats.grossProfit >= 0 ? "emerald" : "red"} />
