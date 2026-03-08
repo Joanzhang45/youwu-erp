@@ -34,6 +34,7 @@ export default function LogisticsPage() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<DomesticLogistics>>({});
+  const [poNumbers, setPoNumbers] = useState<string[]>([]);
   const [createForm, setCreateForm] = useState({
     tracking_number: "",
     po_number: "",
@@ -63,6 +64,14 @@ export default function LogisticsPage() {
 
   useEffect(() => {
     fetchRecords();
+    // Fetch PO numbers for datalist
+    getSupabase()
+      .from("purchase_orders")
+      .select("po_number")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (data) setPoNumbers(data.map((d) => d.po_number));
+      });
   }, [fetchRecords]);
 
   const isArrived = (s: string | null) => s === "已到達" || s === "已入倉" || s === "已入庫";
@@ -207,8 +216,11 @@ export default function LogisticsPage() {
             </div>
             <div>
               <label className="block text-[11px] text-slate-500 mb-0.5">採購單號</label>
-              <input type="text" value={createForm.po_number} onChange={(e) => setCreateForm({ ...createForm, po_number: e.target.value })}
+              <input type="text" list="po-list" value={createForm.po_number} onChange={(e) => setCreateForm({ ...createForm, po_number: e.target.value })}
                 className="w-full px-2 py-1.5 border rounded text-sm outline-none focus:ring-2 focus:ring-blue-300" placeholder="PO-..." />
+              <datalist id="po-list">
+                {poNumbers.map((pn) => <option key={pn} value={pn} />)}
+              </datalist>
             </div>
             <div>
               <label className="block text-[11px] text-slate-500 mb-0.5">物流公司</label>

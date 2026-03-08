@@ -39,6 +39,13 @@ function SelectionDetailContent() {
     weight_kg: 0, domestic_shipping_cny: 0, qty: 0,
   });
 
+  // Variant edit
+  const [editingVariantId, setEditingVariantId] = useState<number | null>(null);
+  const [variantEditForm, setVariantEditForm] = useState({
+    purchase_price_cny: 0, selling_price_ntd: 0, weight_kg: 0,
+    domestic_shipping_cny: 0, qty: 0,
+  });
+
   // Competitor form
   const [showAddCompetitor, setShowAddCompetitor] = useState(false);
   const [competitorForm, setCompetitorForm] = useState({
@@ -160,6 +167,55 @@ function SelectionDetailContent() {
       recalcTotals();
     } catch (e) {
       toast(e instanceof Error ? e.message : "刪除失敗", "error");
+    }
+  };
+
+  const startEditVariant = (v: ProductVariant) => {
+    setEditingVariantId(v.id);
+    setVariantEditForm({
+      purchase_price_cny: v.purchase_price_cny || 0,
+      selling_price_ntd: v.selling_price_ntd || 0,
+      weight_kg: v.weight_kg || 0,
+      domestic_shipping_cny: v.domestic_shipping_cny || 0,
+      qty: v.qty || 0,
+    });
+  };
+
+  const saveVariant = async () => {
+    if (!editingVariantId || !selection) return;
+    setSaving(true);
+    try {
+      const cnyRate = selection.cny_rate || 4.6;
+      const shippingRate = selection.shipping_rate_per_kg || 0;
+      const unitCostNtd = (variantEditForm.purchase_price_cny + variantEditForm.domestic_shipping_cny) * cnyRate
+        + variantEditForm.weight_kg * shippingRate;
+      const profitNtd = variantEditForm.selling_price_ntd - unitCostNtd;
+      const marginPct = variantEditForm.selling_price_ntd > 0
+        ? (profitNtd / variantEditForm.selling_price_ntd) * 100
+        : 0;
+
+      const { error: err } = await getSupabase()
+        .from("product_variants")
+        .update({
+          purchase_price_cny: variantEditForm.purchase_price_cny || null,
+          selling_price_ntd: variantEditForm.selling_price_ntd || null,
+          weight_kg: variantEditForm.weight_kg || null,
+          domestic_shipping_cny: variantEditForm.domestic_shipping_cny || null,
+          qty: variantEditForm.qty || null,
+          unit_cost_ntd: Math.round(unitCostNtd * 100) / 100,
+          profit_ntd: Math.round(profitNtd * 100) / 100,
+          margin_pct: Math.round(marginPct * 10) / 10,
+        })
+        .eq("id", editingVariantId);
+      if (err) throw err;
+      toast("款式已更新", "success");
+      setEditingVariantId(null);
+      fetchData();
+      recalcTotals();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "更新失敗", "error");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -420,30 +476,76 @@ function SelectionDetailContent() {
           <div className="space-y-2">
             {variants.map((v) => (
               <div key={v.id} className="bg-white rounded-xl p-3 shadow-sm border border-slate-200">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h4 className="font-medium text-sm truncate">{v.variant_name}</h4>
-                    <div className="flex gap-3 mt-1 text-[11px] text-slate-500 flex-wrap">
-                      {v.purchase_price_cny != null && <span>進價 ¥{v.purchase_price_cny}</span>}
-                      {v.selling_price_ntd != null && <span>售價 ${v.selling_price_ntd}</span>}
-                      {v.qty != null && <span>x{v.qty}</span>}
-                      {v.weight_kg != null && <span>{v.weight_kg}kg</span>}
+                {editingVariantId === v.id ? (
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-sm">{v.variant_name}</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-0.5">進貨價 (CNY)</label>
+                        <input type="number" step="0.01" value={variantEditForm.purchase_price_cny || ""} onChange={(e) => setVariantEditForm({ ...variantEditForm, purchase_price_cny: Number(e.target.value) })}
+                          className="w-full px-2 py-1.5 border rounded text-sm outline-none focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-0.5">售價 (NTD)</label>
+                        <input type="number" step="1" value={variantEditForm.selling_price_ntd || ""} onChange={(e) => setVariantEditForm({ ...variantEditForm, selling_price_ntd: Number(e.target.value) })}
+                          className="w-full px-2 py-1.5 border rounded text-sm outline-none focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-0.5">重量 (kg)</label>
+                        <input type="number" step="0.001" value={variantEditForm.weight_kg || ""} onChange={(e) => setVariantEditForm({ ...variantEditForm, weight_kg: Number(e.target.value) })}
+                          className="w-full px-2 py-1.5 border rounded text-sm outline-none focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-0.5">數量</label>
+                        <input type="number" value={variantEditForm.qty || ""} onChange={(e) => setVariantEditForm({ ...variantEditForm, qty: Number(e.target.value) })}
+                          className="w-full px-2 py-1.5 border rounded text-sm outline-none focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-0.5">境內運費 (CNY)</label>
+                        <input type="number" step="0.1" value={variantEditForm.domestic_shipping_cny || ""} onChange={(e) => setVariantEditForm({ ...variantEditForm, domestic_shipping_cny: Number(e.target.value) })}
+                          className="w-full px-2 py-1.5 border rounded text-sm outline-none focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={saveVariant} disabled={saving}
+                        className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium active:bg-blue-700 disabled:opacity-50">
+                        {saving ? "儲存中..." : "儲存"}
+                      </button>
+                      <button onClick={() => setEditingVariantId(null)}
+                        className="flex-1 py-1.5 rounded-lg bg-slate-200 text-slate-600 text-xs font-medium active:bg-slate-300">
+                        取消
+                      </button>
                     </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    {v.unit_cost_ntd != null && (
-                      <div className="text-xs text-slate-600">成本 ${v.unit_cost_ntd.toFixed(0)}</div>
-                    )}
-                    {v.margin_pct != null && (
-                      <div className={`text-[11px] font-medium ${v.margin_pct >= 40 ? "text-emerald-600" : v.margin_pct >= 20 ? "text-amber-600" : "text-red-500"}`}>
-                        毛利 {v.margin_pct.toFixed(1)}%
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="font-medium text-sm truncate">{v.variant_name}</h4>
+                        <div className="flex gap-3 mt-1 text-[11px] text-slate-500 flex-wrap">
+                          {v.purchase_price_cny != null && <span>進價 ¥{v.purchase_price_cny}</span>}
+                          {v.selling_price_ntd != null && <span>售價 ${v.selling_price_ntd}</span>}
+                          {v.qty != null && <span>x{v.qty}</span>}
+                          {v.weight_kg != null && <span>{v.weight_kg}kg</span>}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex justify-end mt-1">
-                  <button onClick={() => deleteVariant(v.id)} className="text-[10px] text-red-400 active:text-red-600">刪除</button>
-                </div>
+                      <div className="text-right flex-shrink-0">
+                        {v.unit_cost_ntd != null && (
+                          <div className="text-xs text-slate-600">成本 ${v.unit_cost_ntd.toFixed(0)}</div>
+                        )}
+                        {v.margin_pct != null && (
+                          <div className={`text-[11px] font-medium ${v.margin_pct >= 40 ? "text-emerald-600" : v.margin_pct >= 20 ? "text-amber-600" : "text-red-500"}`}>
+                            毛利 {v.margin_pct.toFixed(1)}%
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-3 mt-1">
+                      <button onClick={() => startEditVariant(v)} className="text-[10px] text-blue-500 active:text-blue-700">編輯</button>
+                      <button onClick={() => deleteVariant(v.id)} className="text-[10px] text-red-400 active:text-red-600">刪除</button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
