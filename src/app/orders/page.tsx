@@ -33,6 +33,15 @@ function exportOrdersCSV(orders: SalesOrder[]) {
   URL.revokeObjectURL(url);
 }
 
+interface SummaryStats {
+  totalRevenue: number;
+  totalNet: number;
+  totalFees: number;
+  totalCOGS: number;
+  totalProfit: number;
+  filteredCount: number;
+}
+
 export default function OrdersPage() {
   const { toast } = useToast();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
@@ -48,26 +57,110 @@ export default function OrdersPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [orderCOGS, setOrderCOGS] = useState<Record<number, number>>({});
 
+  // Summary stats from full DB query (when date filter active)
+  const [dbSummary, setDbSummary] = useState<SummaryStats | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+
+  const hasDateFilter = dateFrom || dateTo;
+
+  // Fetch summary stats from full DB when date filter is active
+  const fetchDateFilteredSummary = useCallback(async (from: string, to: string) => {
+    try {
+      setSummaryLoading(true);
+      let query = getSupabase()
+        .from("sales_orders")
+        .select("id, order_amount, net_revenue, transaction_fee, payment_processing_fee, extended_prep_fee, seller_coupon, platform_coupon");
+
+      if (from) query = query.gte("order_date", from);
+      if (to) query = query.lte("order_date", to);
+
+      const { data: filteredOrders, error } = await query;
+      if (error) throw error;
+
+      const allFiltered = filteredOrders || [];
+      const totalRevenue = allFiltered.reduce((sum, o) => sum + (Number(o.order_amount) || 0), 0);
+      const totalNet = allFiltered.reduce((sum, o) => sum + (Number(o.net_revenue) || 0), 0);
+      const totalFees = totalRevenue - totalNet;
+
+      // Fetch COGS for filtered orders
+      let totalCOGS = 0;
+      if (allFiltered.length > 0) {
+        const orderIds = allFiltered.map((o) => o.id);
+        const { data: items } = await getSupabase()
+          .from("sales_order_items")
+          .select("order_id, product_id, qty")
+          .in("order_id", orderIds);
+
+        if (items && items.length > 0) {
+          const productIds = [...new Set(items.map((i) => i.product_id).filter(Boolean))];
+          const { data: products } = await getSupabase()
+            .from("products")
+            .select("id, unit_cost_ntd")
+            .in("id", productIds);
+
+          const costMap: Record<number, number> = {};
+          (products || []).forEach((p) => { costMap[p.id] = Number(p.unit_cost_ntd) || 0; });
+
+          totalCOGS = items.reduce((sum, item) => {
+            const cost = item.product_id ? (costMap[item.product_id] || 0) : 0;
+            return sum + cost * (Number(item.qty) || 1);
+          }, 0);
+        }
+      }
+
+      setDbSummary({
+        totalRevenue,
+        totalNet,
+        totalFees,
+        totalCOGS,
+        totalProfit: totalNet - totalCOGS,
+        filteredCount: allFiltered.length,
+      });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "統計載入失敗", "error");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [toast]);
+
+  // When date filter changes, fetch full summary from DB
+  useEffect(() => {
+    if (dateFrom || dateTo) {
+      fetchDateFilteredSummary(dateFrom, dateTo);
+    } else {
+      setDbSummary(null);
+    }
+  }, [dateFrom, dateTo, fetchDateFilteredSummary]);
+
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
-      // Get total count
-      const { count } = await getSupabase()
+
+      // Build count query with date filter
+      let countQuery = getSupabase()
         .from("sales_orders")
         .select("*", { count: "exact", head: true });
+      if (dateFrom) countQuery = countQuery.gte("order_date", dateFrom);
+      if (dateTo) countQuery = countQuery.lte("order_date", dateTo);
+      const { count } = await countQuery;
       setTotalCount(count || 0);
 
+      // Build data query with date filter + pagination
       const from = page * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
-      const { data, error } = await getSupabase()
+      let dataQuery = getSupabase()
         .from("sales_orders")
         .select("*")
-        .order("order_date", { ascending: false })
-        .range(from, to);
+        .order("order_date", { ascending: false });
+      if (dateFrom) dataQuery = dataQuery.gte("order_date", dateFrom);
+      if (dateTo) dataQuery = dataQuery.lte("order_date", dateTo);
+      dataQuery = dataQuery.range(from, to);
+
+      const { data, error } = await dataQuery;
       if (error) throw error;
       setOrders(data || []);
 
-      // Fetch order items + product costs for COGS calculation
+      // Fetch order items + product costs for COGS calculation (per-card display)
       if (data && data.length > 0) {
         const orderIds = data.map((o) => o.id);
         const { data: items } = await getSupabase()
@@ -92,18 +185,27 @@ export default function OrdersPage() {
             cogsByOrder[item.order_id] = (cogsByOrder[item.order_id] || 0) + cost * (Number(item.qty) || 1);
           });
           setOrderCOGS(cogsByOrder);
+        } else {
+          setOrderCOGS({});
         }
+      } else {
+        setOrderCOGS({});
       }
     } catch (e) {
       toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, dateFrom, dateTo, toast]);
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  // Reset page when date filter changes
+  useEffect(() => {
+    setPage(0);
+  }, [dateFrom, dateTo]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -223,20 +325,22 @@ export default function OrdersPage() {
     }
   };
 
-  const filtered = useMemo(() => {
-    return orders.filter((o) => {
-      if (dateFrom && o.order_date && o.order_date < dateFrom) return false;
-      if (dateTo && o.order_date && o.order_date > dateTo) return false;
-      return true;
-    });
-  }, [orders, dateFrom, dateTo]);
-
-  const totalRevenue = filtered.reduce((sum, o) => sum + (Number(o.order_amount) || 0), 0);
-  const totalNet = filtered.reduce((sum, o) => sum + (Number(o.net_revenue) || 0), 0);
-  const totalFees = totalRevenue - totalNet;
-  const totalCOGS = filtered.reduce((sum, o) => sum + (orderCOGS[o.id] || 0), 0);
-  const totalProfit = totalNet - totalCOGS;
-  const hasDateFilter = dateFrom || dateTo;
+  // Summary stats: use DB query result when date filter is active, otherwise calculate from current page
+  const summaryStats = useMemo((): SummaryStats => {
+    if (dbSummary) return dbSummary;
+    const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.order_amount) || 0), 0);
+    const totalNet = orders.reduce((sum, o) => sum + (Number(o.net_revenue) || 0), 0);
+    const totalFees = totalRevenue - totalNet;
+    const totalCOGS = orders.reduce((sum, o) => sum + (orderCOGS[o.id] || 0), 0);
+    return {
+      totalRevenue,
+      totalNet,
+      totalFees,
+      totalCOGS,
+      totalProfit: totalNet - totalCOGS,
+      filteredCount: totalCount,
+    };
+  }, [orders, orderCOGS, totalCount, dbSummary]);
 
   return (
     <div className="min-h-screen">
@@ -245,11 +349,13 @@ export default function OrdersPage() {
         <div className="flex-1">
           <h1 className="text-lg font-bold">銷售訂單</h1>
           <p className="text-xs text-slate-300">
-            {hasDateFilter ? `篩選 ${filtered.length} / ${orders.length} 筆` : `共 ${totalCount} 筆訂單（第 ${page + 1}/${totalPages} 頁）`}
+            {hasDateFilter
+              ? `篩選 ${summaryStats.filteredCount} 筆（顯示第 ${page + 1}/${totalPages || 1} 頁）`
+              : `共 ${totalCount} 筆訂單（第 ${page + 1}/${totalPages || 1} 頁）`}
           </p>
         </div>
         <button
-          onClick={() => exportOrdersCSV(filtered)}
+          onClick={() => exportOrdersCSV(orders)}
           className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600"
         >
           CSV
@@ -312,64 +418,71 @@ export default function OrdersPage() {
       )}
 
       {/* Date Filter */}
-      {orders.length > 0 && (
-        <div className="px-4 py-2 bg-white border-b">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-400 flex-shrink-0">日期</span>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="flex-1 px-2 py-1.5 border rounded text-xs outline-none focus:ring-2 focus:ring-blue-300"
-              placeholder="起"
-            />
-            <span className="text-slate-300">~</span>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="flex-1 px-2 py-1.5 border rounded text-xs outline-none focus:ring-2 focus:ring-blue-300"
-              placeholder="迄"
-            />
-            {hasDateFilter && (
-              <button
-                onClick={() => { setDateFrom(""); setDateTo(""); }}
-                className="text-xs text-slate-400 px-2 py-1"
-              >
-                清除
-              </button>
-            )}
-          </div>
+      <div className="px-4 py-2 bg-white border-b">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-slate-400 flex-shrink-0">日期</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="flex-1 px-2 py-1.5 border rounded text-xs outline-none focus:ring-2 focus:ring-blue-300"
+            placeholder="起"
+          />
+          <span className="text-slate-300">~</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="flex-1 px-2 py-1.5 border rounded text-xs outline-none focus:ring-2 focus:ring-blue-300"
+            placeholder="迄"
+          />
+          {hasDateFilter && (
+            <button
+              onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="text-xs text-slate-400 px-2 py-1"
+            >
+              清除
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Summary */}
-      {filtered.length > 0 && (
+      {(orders.length > 0 || (hasDateFilter && summaryStats.filteredCount > 0)) && (
         <div className="px-4 py-3 bg-slate-50 border-b space-y-2">
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <div>
-              <div className="text-[11px] text-slate-400">總營收</div>
-              <div className="text-sm font-bold text-slate-800">${totalRevenue.toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-400">平台費用</div>
-              <div className="text-sm font-bold text-red-500">-${Math.abs(totalFees).toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-400">淨營收</div>
-              <div className="text-sm font-bold text-blue-600">${totalNet.toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-400">商品成本</div>
-              <div className="text-sm font-bold text-amber-600">-${totalCOGS.toLocaleString()}</div>
-            </div>
-          </div>
-          <div className="text-center py-1.5 rounded-lg bg-white border">
-            <div className="text-[11px] text-slate-400">淨利潤（淨營收 - 商品成本）</div>
-            <div className={`text-lg font-bold ${totalProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-              ${totalProfit.toLocaleString()}
-            </div>
-          </div>
+          {summaryLoading ? (
+            <div className="text-center text-xs text-slate-400 py-2">統計計算中...</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div>
+                  <div className="text-[11px] text-slate-400">總營收</div>
+                  <div className="text-sm font-bold text-slate-800">${summaryStats.totalRevenue.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-400">平台費用</div>
+                  <div className="text-sm font-bold text-red-500">-${Math.abs(summaryStats.totalFees).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-400">淨營收</div>
+                  <div className="text-sm font-bold text-blue-600">${summaryStats.totalNet.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-400">商品成本</div>
+                  <div className="text-sm font-bold text-amber-600">-${summaryStats.totalCOGS.toLocaleString()}</div>
+                </div>
+              </div>
+              <div className="text-center py-1.5 rounded-lg bg-white border">
+                <div className="text-[11px] text-slate-400">淨利潤（淨營收 - 商品成本）</div>
+                <div className={`text-lg font-bold ${summaryStats.totalProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                  ${summaryStats.totalProfit.toLocaleString()}
+                </div>
+                {hasDateFilter && (
+                  <div className="text-[10px] text-slate-400">基於全部 {summaryStats.filteredCount} 筆篩選結果</div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -377,19 +490,19 @@ export default function OrdersPage() {
       <div className="px-4 py-2">
         {loading ? (
           <div className="text-center py-12 text-slate-400">載入中...</div>
-        ) : filtered.length === 0 ? (
+        ) : orders.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-slate-400 mb-2">
-              {orders.length === 0 ? "尚無訂單資料" : "此日期範圍無訂單"}
+              {hasDateFilter ? "此日期範圍無訂單" : "尚無訂單資料"}
             </p>
-            {orders.length === 0 && (
+            {!hasDateFilter && (
               <p className="text-xs text-slate-400">從蝦皮後台下載「訂單」CSV 後匯入</p>
             )}
           </div>
         ) : (
           <>
             <div className="space-y-2">
-              {filtered.map((o) => (
+              {orders.map((o) => (
                 <OrderCard key={o.id} order={o} cogs={orderCOGS[o.id] || 0} />
               ))}
             </div>
@@ -451,8 +564,22 @@ function FormulaLabel({ label, formula }: { label: string; formula: string }) {
   );
 }
 
+interface OrderItem {
+  id: number;
+  product_id: number | null;
+  qty: number | null;
+  unit_price: number | null;
+  product_name: string | null;
+  variant_name: string | null;
+  resolved_name?: string | null;
+}
+
 function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
   const [expanded, setExpanded] = useState(false);
+  const [items, setItems] = useState<OrderItem[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
+  const [itemsFetched, setItemsFetched] = useState(false);
+
   const fees = Math.abs(Number(o.transaction_fee) || 0)
     + Math.abs(Number(o.payment_processing_fee) || 0)
     + Math.abs(Number(o.extended_prep_fee) || 0)
@@ -463,6 +590,62 @@ function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
   const netRevenue = Number(o.net_revenue) || 0;
   const profit = netRevenue - cogs;
   const marginRate = orderAmount > 0 ? (profit / orderAmount * 100) : 0;
+
+  // Lazy load items when expanded
+  useEffect(() => {
+    if (!expanded || itemsFetched) return;
+    let cancelled = false;
+
+    const fetchItems = async () => {
+      setItemsLoading(true);
+      try {
+        const { data } = await getSupabase()
+          .from("sales_order_items")
+          .select("id, product_id, qty, unit_price, shopee_item_name, shopee_variant_name")
+          .eq("order_id", o.id);
+
+        if (cancelled) return;
+
+        const rawItems = (data || []).map((item) => ({
+          id: item.id,
+          product_id: item.product_id,
+          qty: item.qty,
+          price: item.unit_price,
+          shopee_item_name: item.shopee_item_name,
+          shopee_variant_name: item.shopee_variant_name,
+        }));
+
+        // Fetch product names for items with product_id
+        const productIds = [...new Set(rawItems.map((i) => i.product_id).filter(Boolean))] as number[];
+        if (productIds.length > 0) {
+          const { data: products } = await getSupabase()
+            .from("products")
+            .select("id, product_name")
+            .in("id", productIds);
+
+          if (!cancelled) {
+            const nameMap: Record<number, string> = {};
+            (products || []).forEach((p) => { nameMap[p.id] = p.product_name; });
+
+            setItems(rawItems.map((item) => ({
+              ...item,
+              product_name: item.product_id ? nameMap[item.product_id] || null : null,
+            })));
+          }
+        } else {
+          if (!cancelled) setItems(rawItems);
+        }
+        if (!cancelled) setItemsFetched(true);
+      } catch {
+        // silently fail
+      } finally {
+        if (!cancelled) setItemsLoading(false);
+      }
+    };
+
+    fetchItems();
+    return () => { cancelled = true; };
+  }, [expanded, itemsFetched, o.id]);
 
   return (
     <div
@@ -502,6 +685,35 @@ function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
 
       {expanded && (
         <div className="mt-2 pt-2 border-t space-y-1 text-[11px] text-slate-500">
+          {/* Order Items */}
+          <div className="mb-2">
+            <div className="text-[11px] font-medium text-slate-600 mb-1">訂單品項</div>
+            {itemsLoading ? (
+              <div className="text-[11px] text-slate-400 py-1">載入品項中...</div>
+            ) : items.length === 0 ? (
+              <div className="text-[11px] text-slate-400 py-1">無品項資料</div>
+            ) : (
+              <div className="space-y-1">
+                {items.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-2 py-1.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-medium text-slate-700 truncate">
+                        {item.product_name || item.shopee_item_name || "未知商品"}
+                      </div>
+                      {item.shopee_variant_name && (
+                        <div className="text-[10px] text-slate-400 truncate">{item.shopee_variant_name}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 text-[11px] text-slate-500 ml-2">
+                      <span>x{Number(item.qty) || 1}</span>
+                      {item.price != null && <span>${Number(item.price).toLocaleString()}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <FeeRow label="成交手續費" value={o.transaction_fee} negative />
           <FeeRow label="活動/服務費" value={o.extended_prep_fee} negative />
           <FeeRow label="金流服務費" value={o.payment_processing_fee} negative />
