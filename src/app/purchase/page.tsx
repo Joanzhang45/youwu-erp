@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { FilterTab } from "@/components/FilterTab";
 import type { PurchaseOrder } from "@/lib/database.types";
 
@@ -36,8 +37,19 @@ function getStatusColor(status: string): string {
 
 type FilterType = "all" | "active" | "completed" | "cancelled";
 
+// Sort priority: in-progress first (by status progress), then completed/cancelled last
+function getStatusSortKey(po: PurchaseOrder): number {
+  const status = getCurrentStatus(po);
+  if (status === "已取消") return 200;
+  if (status === "已到貨") return 100;
+  // Active statuses: lower progress index = earlier stage = higher priority
+  const idx = STATUS_STEPS.findIndex((s) => s.label === status);
+  return idx >= 0 ? idx : 50;
+}
+
 export default function PurchasePage() {
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,13 +85,21 @@ export default function PurchasePage() {
     fetchOrders();
   }, [fetchOrders]);
 
-  const filtered = orders.filter((po) => {
-    const status = getCurrentStatus(po);
-    if (filter === "active") return status !== "已到貨" && status !== "已取消";
-    if (filter === "completed") return status === "已到貨";
-    if (filter === "cancelled") return status === "已取消";
-    return true;
-  });
+  const filtered = orders
+    .filter((po) => {
+      const status = getCurrentStatus(po);
+      if (filter === "active") return status !== "已到貨" && status !== "已取消";
+      if (filter === "completed") return status === "已到貨";
+      if (filter === "cancelled") return status === "已取消";
+      return true;
+    })
+    .sort((a, b) => {
+      const ka = getStatusSortKey(a);
+      const kb = getStatusSortKey(b);
+      if (ka !== kb) return ka - kb;
+      // Same priority group: newer first
+      return (b.created_at || "").localeCompare(a.created_at || "");
+    });
 
   const generatePoNumber = () => {
     const now = new Date();
@@ -113,6 +133,26 @@ export default function PurchasePage() {
       toast(e instanceof Error ? e.message : "建立失敗", "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const deleteOrder = async (po: PurchaseOrder) => {
+    const ok = await confirm({
+      title: "刪除採購單",
+      message: `確定要刪除採購單 ${po.po_number}？此操作會同時刪除所有品項，無法復原。`,
+      confirmText: "刪除",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      // Delete items first (cascade)
+      await getSupabase().from("purchase_order_items").delete().eq("po_id", po.id);
+      const { error: err } = await getSupabase().from("purchase_orders").delete().eq("id", po.id);
+      if (err) throw err;
+      toast("採購單已刪除", "success");
+      fetchOrders();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "刪除失敗", "error");
     }
   };
 
@@ -267,7 +307,7 @@ export default function PurchasePage() {
         ) : (
           <div className="space-y-2">
             {filtered.map((po) => (
-              <POCard key={po.id} po={po} />
+              <POCard key={po.id} po={po} onDelete={() => deleteOrder(po)} />
             ))}
           </div>
         )}
@@ -276,57 +316,70 @@ export default function PurchasePage() {
   );
 }
 
-function POCard({ po }: { po: PurchaseOrder }) {
+function POCard({ po, onDelete }: { po: PurchaseOrder; onDelete: () => void }) {
   const status = getCurrentStatus(po);
   const statusColor = getStatusColor(status);
+  const canDelete = status === "草稿" || status === "已取消";
 
   // Calculate progress
   const progressIndex = STATUS_STEPS.findIndex((s) => s.label === status);
   const progress = status === "已取消" ? 0 : ((progressIndex + 1) / STATUS_STEPS.length) * 100;
 
   return (
-    <Link
-      href={`/purchase/detail?id=${po.id}`}
-      className="block bg-white rounded-xl p-4 shadow-sm border border-slate-200 hover:border-slate-300 transition-all active:scale-[0.99]"
-    >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div>
-          <h3 className="font-bold text-sm">{po.po_number}</h3>
-          {po.order_date && (
-            <p className="text-[11px] text-slate-400 mt-0.5">{po.order_date}</p>
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 hover:border-slate-300 transition-all">
+      <Link
+        href={`/purchase/detail?id=${po.id}`}
+        className="block active:scale-[0.99]"
+      >
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div>
+            <h3 className="font-bold text-sm">{po.po_number}</h3>
+            {po.order_date && (
+              <p className="text-[11px] text-slate-400 mt-0.5">{po.order_date}</p>
+            )}
+          </div>
+          <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusColor}`}>
+            {status}
+          </span>
+        </div>
+
+        {/* Progress Bar */}
+        {status !== "已取消" && (
+          <div className="h-1.5 bg-slate-100 rounded-full mb-2 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${status === "已到貨" ? "bg-emerald-500" : "bg-blue-500"}`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
+
+        {/* Info Row */}
+        <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
+          {po.purchaser && <span>採購: {po.purchaser}</span>}
+          {po.forwarder && <span>集運: {po.forwarder}</span>}
+          {po.cny_rate && <span>匯率: {po.cny_rate}</span>}
+          {po.grand_total != null && po.grand_total > 0 && (
+            <span className="font-medium text-slate-700">${po.grand_total.toLocaleString()}</span>
+          )}
+          {po.subtotal_cny != null && po.subtotal_cny > 0 && (
+            <span>¥{po.subtotal_cny.toLocaleString()}</span>
           )}
         </div>
-        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusColor}`}>
-          {status}
-        </span>
-      </div>
 
-      {/* Progress Bar */}
-      {status !== "已取消" && (
-        <div className="h-1.5 bg-slate-100 rounded-full mb-2 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${status === "已到貨" ? "bg-emerald-500" : "bg-blue-500"}`}
-            style={{ width: `${progress}%` }}
-          />
+        {po.notes && (
+          <p className="text-[11px] text-slate-400 mt-1 truncate">{po.notes}</p>
+        )}
+      </Link>
+      {canDelete && (
+        <div className="flex justify-end mt-1">
+          <button
+            onClick={onDelete}
+            className="text-[10px] text-red-400 active:text-red-600"
+          >
+            刪除
+          </button>
         </div>
       )}
-
-      {/* Info Row */}
-      <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
-        {po.purchaser && <span>採購: {po.purchaser}</span>}
-        {po.forwarder && <span>集運: {po.forwarder}</span>}
-        {po.cny_rate && <span>匯率: {po.cny_rate}</span>}
-        {po.grand_total != null && po.grand_total > 0 && (
-          <span className="font-medium text-slate-700">${po.grand_total.toLocaleString()}</span>
-        )}
-        {po.subtotal_cny != null && po.subtotal_cny > 0 && (
-          <span>¥{po.subtotal_cny.toLocaleString()}</span>
-        )}
-      </div>
-
-      {po.notes && (
-        <p className="text-[11px] text-slate-400 mt-1 truncate">{po.notes}</p>
-      )}
-    </Link>
+    </div>
   );
 }
