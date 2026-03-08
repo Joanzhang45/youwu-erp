@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { FilterTab } from "@/components/FilterTab";
 import type { DomesticLogistics } from "@/lib/database.types";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -13,7 +14,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   "運送中": { label: "運送中", color: "bg-amber-100 text-amber-700" },
   "已到達": { label: "已到達", color: "bg-emerald-100 text-emerald-700" },
   "已入倉": { label: "已入倉", color: "bg-purple-100 text-purple-700" },
-  "\uD83D\uDDC4\uFE0F 已入庫": { label: "已入庫", color: "bg-purple-100 text-purple-700" },
+  "已入庫": { label: "已入庫", color: "bg-purple-100 text-purple-700" },
   "異常": { label: "異常", color: "bg-red-100 text-red-700" },
 };
 
@@ -64,7 +65,7 @@ export default function LogisticsPage() {
     fetchRecords();
   }, [fetchRecords]);
 
-  const isArrived = (s: string | null) => s === "已到達" || s === "已入倉" || (s != null && s.includes("已入庫"));
+  const isArrived = (s: string | null) => s === "已到達" || s === "已入倉" || s === "已入庫";
   const isAbnormal = (s: string | null) => s === "異常";
 
   const filtered = records
@@ -303,25 +304,6 @@ export default function LogisticsPage() {
         )}
       </div>
     </div>
-  );
-}
-
-const FILTER_STYLES: Record<string, { active: string; inactive: string }> = {
-  default: { active: "bg-slate-800 text-white", inactive: "bg-slate-100 text-slate-600" },
-  blue: { active: "bg-blue-500 text-white", inactive: "bg-blue-50 text-blue-700" },
-  emerald: { active: "bg-emerald-500 text-white", inactive: "bg-emerald-50 text-emerald-700" },
-  red: { active: "bg-red-500 text-white", inactive: "bg-red-50 text-red-700" },
-};
-
-function FilterTab({ label, active, onClick, color }: {
-  label: string; active: boolean; onClick: () => void; color?: string;
-}) {
-  const style = FILTER_STYLES[color || "default"] || FILTER_STYLES.default;
-  return (
-    <button onClick={onClick}
-      className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${active ? style.active : style.inactive}`}>
-      {label}
-    </button>
   );
 }
 

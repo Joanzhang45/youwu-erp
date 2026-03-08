@@ -135,6 +135,10 @@ function ReceivingContent() {
   const submitReceiving = async () => {
     if (!shipment) return;
     setSubmitting(true);
+    let createdReceivingId: number | null = null;
+    const updatedProductIds: { id: number; prev: { total_purchased_qty: number; stock_qty: number; unit_cost_ntd: number | null; latest_po_number: string | null } }[] = [];
+    const createdMovementIds: number[] = [];
+
     try {
       const totalShipmentCost = Number(shipment.total_cost_ntd) || 0;
       const totalWeight = Number(shipment.total_weight_kg) || 1;
@@ -152,6 +156,7 @@ function ReceivingContent() {
         .select("id")
         .single();
       if (rvErr) throw rvErr;
+      createdReceivingId = rvData.id;
 
       // 2. Create receiving record items
       const rvItems = items.map((item) => ({
@@ -176,11 +181,22 @@ function ReceivingContent() {
         // Get current product data for cost calculation
         const { data: product } = await getSupabase()
           .from("products")
-          .select("purchase_price_cny, weight_kg, total_purchased_qty, stock_qty, unit_cost_ntd")
+          .select("purchase_price_cny, weight_kg, total_purchased_qty, stock_qty, unit_cost_ntd, latest_po_number")
           .eq("id", item.product_id)
           .single();
 
         if (!product) continue;
+
+        // Save previous values for rollback
+        updatedProductIds.push({
+          id: item.product_id,
+          prev: {
+            total_purchased_qty: product.total_purchased_qty || 0,
+            stock_qty: product.stock_qty || 0,
+            unit_cost_ntd: product.unit_cost_ntd,
+            latest_po_number: product.latest_po_number,
+          },
+        });
 
         const purchasePriceCny = Number(product.purchase_price_cny) || 0;
         const itemWeight = Number(item.weight_kg) || Number(product.weight_kg) || 0;
@@ -201,7 +217,7 @@ function ReceivingContent() {
         const newPurchasedQty = (product.total_purchased_qty || 0) + item.actual_qty;
         const newStockQty = (product.stock_qty || 0) + item.actual_qty;
 
-        await getSupabase()
+        const { error: prodErr } = await getSupabase()
           .from("products")
           .update({
             unit_cost_ntd: Math.round(landedCostPerUnit * 100) / 100,
@@ -210,9 +226,10 @@ function ReceivingContent() {
             latest_po_number: shipment.shipment_number,
           })
           .eq("id", item.product_id);
+        if (prodErr) throw prodErr;
 
         // Create stock movement
-        await getSupabase()
+        const { data: mvData, error: mvErr } = await getSupabase()
           .from("stock_movements")
           .insert({
             product_id: item.product_id,
@@ -221,7 +238,11 @@ function ReceivingContent() {
             reference_type: "receiving",
             notes: `驗收入庫 ${receivingNumber}`,
             created_by: "receiving",
-          });
+          })
+          .select("id")
+          .single();
+        if (mvErr) throw mvErr;
+        if (mvData) createdMovementIds.push(mvData.id);
       }
 
       // 4. Update shipment status
@@ -233,7 +254,23 @@ function ReceivingContent() {
       toast("驗收完成！庫存與成本已更新。");
       window.location.href = "/purchase/shipments";
     } catch (e) {
-      toast(e instanceof Error ? e.message : "驗收失敗", "error");
+      toast(e instanceof Error ? e.message : "驗收失敗，正在回滾...", "error");
+
+      // Rollback: best-effort cleanup
+      try {
+        for (const { id, prev } of updatedProductIds) {
+          await getSupabase().from("products").update(prev).eq("id", id);
+        }
+        for (const mvId of createdMovementIds) {
+          await getSupabase().from("stock_movements").delete().eq("id", mvId);
+        }
+        if (createdReceivingId) {
+          await getSupabase().from("receiving_record_items").delete().eq("receiving_id", createdReceivingId);
+          await getSupabase().from("receiving_records").delete().eq("id", createdReceivingId);
+        }
+      } catch {
+        toast("回滾部分失敗，請手動檢查資料", "error");
+      }
     } finally {
       setSubmitting(false);
     }
