@@ -568,10 +568,10 @@ interface OrderItem {
   id: number;
   product_id: number | null;
   qty: number | null;
-  unit_price: number | null;
-  product_name: string | null;
-  variant_name: string | null;
-  resolved_name?: string | null;
+  price: number | null;
+  shopee_item_name: string | null;
+  shopee_variant_name: string | null;
+  product_name?: string | null;
 }
 
 function OrderCard({ order: o, cogs }: { order: SalesOrder; cogs: number }) {
