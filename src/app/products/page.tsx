@@ -82,15 +82,34 @@ export default function ProductsPage() {
     product_positioning: "一般款",
   });
 
+  const [shopeeNames, setShopeeNames] = useState<Record<number, string[]>>({});
+
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error: err } = await getSupabase()
-        .from("products")
-        .select("*")
-        .order("product_name");
-      if (err) throw err;
-      setProducts(data || []);
+      const [prodRes, itemsRes] = await Promise.all([
+        getSupabase().from("products").select("*").order("product_name"),
+        getSupabase().from("sales_order_items").select("product_id,variant_name"),
+      ]);
+      if (prodRes.error) throw prodRes.error;
+      setProducts(prodRes.data || []);
+
+      // Aggregate unique Shopee variant names per product_id
+      if (itemsRes.data) {
+        const map: Record<number, Set<string>> = {};
+        for (const item of itemsRes.data) {
+          if (!item.product_id || !item.variant_name) continue;
+          if (!map[item.product_id]) map[item.product_id] = new Set();
+          // Extract just the first part before comma (the actual variant name, not dimensions)
+          const name = item.variant_name.split(",")[0].trim();
+          if (name) map[item.product_id].add(name);
+        }
+        const result: Record<number, string[]> = {};
+        for (const [pid, names] of Object.entries(map)) {
+          result[Number(pid)] = Array.from(names).sort();
+        }
+        setShopeeNames(result);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "載入失敗");
     } finally {
@@ -441,6 +460,7 @@ export default function ProductsPage() {
                 onSave={saveEdit}
                 onCancelEdit={() => setEditingId(null)}
                 saving={saving}
+                shopeeNames={shopeeNames}
               />
             ))}
           </div>
@@ -500,6 +520,7 @@ function ProductGroup({
   onSave,
   onCancelEdit,
   saving,
+  shopeeNames,
 }: {
   group: ProductGroup;
   editingId: number | null;
@@ -509,6 +530,7 @@ function ProductGroup({
   onSave: () => void;
   onCancelEdit: () => void;
   saving: boolean;
+  shopeeNames: Record<number, string[]>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const isSingle = group.variants.length === 1;
@@ -525,6 +547,7 @@ function ProductGroup({
           product={firstVariant}
           onEdit={() => onEdit(firstVariant)}
           isEditing={editingId === firstVariant.id}
+          shopeeVariants={shopeeNames[firstVariant.id]}
         />
         {editingId === firstVariant.id && (
           <EditPanel
@@ -596,6 +619,7 @@ function ProductGroup({
                 variant={v}
                 onEdit={() => onEdit(v)}
                 isEditing={editingId === v.id}
+                shopeeVariants={shopeeNames[v.id]}
               />
               {editingId === v.id && (
                 <EditPanel
@@ -618,10 +642,12 @@ function VariantRow({
   variant: v,
   onEdit,
   isEditing,
+  shopeeVariants,
 }: {
   variant: Product;
   onEdit: () => void;
   isEditing: boolean;
+  shopeeVariants?: string[];
 }) {
   const margin = v.gross_margin != null ? (v.gross_margin * 100).toFixed(1) : null;
   const isOut = v.stock_qty <= 0;
@@ -640,6 +666,11 @@ function VariantRow({
         <div className="text-sm font-medium truncate">
           {v.variant_name || "預設款式"}
         </div>
+        {shopeeVariants && shopeeVariants.length > 0 && (
+          <div className="text-[10px] text-orange-500 truncate mt-0.5">
+            蝦皮: {shopeeVariants.join(" / ")}
+          </div>
+        )}
         <div className="flex gap-2 text-[10px] text-slate-400 mt-0.5 flex-wrap">
           {v.selling_price != null && <span>售 ${v.selling_price}</span>}
           {v.unit_cost_ntd != null && <span>成本 ${v.unit_cost_ntd.toFixed(0)}</span>}
@@ -665,10 +696,12 @@ function ProductCard({
   product: p,
   onEdit,
   isEditing,
+  shopeeVariants,
 }: {
   product: Product;
   onEdit: () => void;
   isEditing: boolean;
+  shopeeVariants?: string[];
 }) {
   const status = STATUS_LABELS[p.product_status || ""] || {
     label: p.product_status || "—",
@@ -716,6 +749,11 @@ function ProductCard({
               <h3 className="font-medium text-sm truncate">{p.product_name}</h3>
               {p.variant_name && (
                 <p className="text-xs text-slate-500 truncate">{p.variant_name}</p>
+              )}
+              {shopeeVariants && shopeeVariants.length > 0 && (
+                <p className="text-[10px] text-orange-500 truncate">
+                  蝦皮: {shopeeVariants.join(" / ")}
+                </p>
               )}
             </div>
             <div className="flex-shrink-0 text-right">
