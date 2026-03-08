@@ -100,11 +100,13 @@ function ReceivingContent() {
     const totalShipmentCost = Number(shipment.total_cost_ntd) || 0;
     const totalWeight = Number(shipment.total_weight_kg) || 1;
 
+    const missingWeightItems: string[] = [];
     setItems((prev) =>
       prev.map((item) => {
         const purchasePriceCny = Number(item.purchase_price_cny) || 0;
         const costBeforeShipping = purchasePriceCny * cnyRate * (1 + cardFeeRate / 100);
         const itemWeight = Number(item.weight_kg) || 0;
+        if (itemWeight <= 0) missingWeightItems.push(item.product_name || "未知商品");
         const shippingPerUnit = totalWeight > 0
           ? (itemWeight / totalWeight) * totalShipmentCost
           : 0;
@@ -117,6 +119,9 @@ function ReceivingContent() {
         };
       })
     );
+    if (missingWeightItems.length > 0) {
+      toast(`以下商品缺少重量，集運費未分攤：${missingWeightItems.join("、")}`, "error");
+    }
   }, [shipment, cnyRate, cardFeeRate]);
 
   useEffect(() => {
@@ -179,6 +184,10 @@ function ReceivingContent() {
 
         const purchasePriceCny = Number(product.purchase_price_cny) || 0;
         const itemWeight = Number(item.weight_kg) || Number(product.weight_kg) || 0;
+
+        if (itemWeight <= 0) {
+          toast(`警告：「${item.product_name}」缺少重量資料，集運費未分攤`, "error");
+        }
 
         // Landed cost calculation per PRD:
         // (CNY進價) × 匯率 × (1 + 海外刷卡手續費率%) + (單品重量 ÷ 批次總重量 × 集運總費用)

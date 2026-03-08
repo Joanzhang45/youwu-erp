@@ -215,7 +215,7 @@ function PurchaseDetailContent() {
         p.product_name.toLowerCase().includes(itemSearch.toLowerCase()) ||
         p.sku?.toLowerCase().includes(itemSearch.toLowerCase()) ||
         p.variant_name?.toLowerCase().includes(itemSearch.toLowerCase())
-      ).slice(0, 8)
+      ).slice(0, 20)
     : [];
 
   return (

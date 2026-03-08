@@ -67,7 +67,8 @@ function getPeriodRange(period: Period): { from: string; to: string } | null {
 export default function AnalyticsPage() {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
-  const [allOrders, setAllOrders] = useState<{ order_date: string | null; order_amount: number | null; net_revenue: number | null }[]>([]);
+  const [allOrders, setAllOrders] = useState<{ id: number; order_date: string | null; order_amount: number | null; net_revenue: number | null }[]>([]);
+  const [allOrderItems, setAllOrderItems] = useState<{ order_id: number; product_id: number | null; qty: number | null }[]>([]);
   const [allAds, setAllAds] = useState<{ amount: number | null; date: string | null }[]>([]);
   const [allExpenses, setAllExpenses] = useState<{ amount: number | null; date: string | null }[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -78,9 +79,10 @@ export default function AnalyticsPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [prodRes, ordersRes, adsRes, expRes] = await Promise.all([
+      const [prodRes, ordersRes, orderItemsRes, adsRes, expRes] = await Promise.all([
         getSupabase().from("products").select("*").order("product_name"),
-        getSupabase().from("sales_orders").select("order_date, order_amount, net_revenue"),
+        getSupabase().from("sales_orders").select("id, order_date, order_amount, net_revenue"),
+        getSupabase().from("sales_order_items").select("order_id, product_id, qty"),
         getSupabase().from("ad_costs").select("amount, date"),
         getSupabase().from("operating_expenses").select("amount, date"),
       ]);
@@ -88,6 +90,7 @@ export default function AnalyticsPage() {
       const prods: Product[] = prodRes.data || [];
       setProducts(prods);
       setAllOrders(ordersRes.data || []);
+      setAllOrderItems(orderItemsRes.data || []);
       setAllAds(adsRes.data || []);
       setAllExpenses(expRes.data || []);
     } catch (e) {
@@ -120,10 +123,15 @@ export default function AnalyticsPage() {
     const totalAdCost = filteredAds.reduce((s, a) => s + (Number(a.amount) || 0), 0);
     const totalExpensesAmt = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
-    // COGS: when filtered, we can't split by period (product stats are cumulative), so use all-time
-    const totalCOGS = period === "all"
-      ? products.reduce((s, p) => s + (Number(p.unit_cost_ntd) || 0) * (Number(p.total_sold_qty) || 0), 0)
-      : 0; // For period views, COGS not available (would need order-item level data)
+    // COGS: calculate from order items filtered by period
+    const filteredOrderIds = new Set(filteredOrders.map((o) => o.id));
+    const filteredItems = allOrderItems.filter((i) => filteredOrderIds.has(i.order_id));
+    const costMap: Record<number, number> = {};
+    products.forEach((p) => { costMap[p.id] = Number(p.unit_cost_ntd) || 0; });
+    const totalCOGS = filteredItems.reduce((s, item) => {
+      const cost = item.product_id ? (costMap[item.product_id] || 0) : 0;
+      return s + cost * (Number(item.qty) || 1);
+    }, 0);
 
     const grossProfit = totalNetRevenue - totalCOGS;
     const netProfit = grossProfit - totalAdCost - totalExpensesAmt;
@@ -143,7 +151,7 @@ export default function AnalyticsPage() {
       outOfStockCount: products.filter((p) => p.stock_qty <= 0).length,
       orderCount: filteredOrders.length,
     });
-  }, [period, products, allOrders, allAds, allExpenses, loading]);
+  }, [period, products, allOrders, allOrderItems, allAds, allExpenses, loading]);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-slate-400">載入中...</div>;
@@ -222,7 +230,7 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-2 gap-3">
               <KPICard label="總營收" value={`$${stats.totalRevenue.toLocaleString()}`} sub={`${stats.orderCount} 筆訂單`} />
               <KPICard label="淨營收" value={`$${stats.totalNetRevenue.toLocaleString()}`} sub="扣除平台費用" color="blue" />
-              <KPICard label="銷貨成本" value={period === "all" ? `$${stats.totalCOGS.toLocaleString()}` : "—"} sub={period === "all" ? "落地成本 x 銷量" : "僅全部檢視可用"} color="amber" />
+              <KPICard label="銷貨成本" value={`$${stats.totalCOGS.toLocaleString()}`} sub="落地成本 x 銷量" color="amber" />
               <KPICard label="毛利" value={`$${stats.grossProfit.toLocaleString()}`}
                 sub={stats.totalNetRevenue > 0 ? `毛利率 ${(stats.grossProfit / stats.totalNetRevenue * 100).toFixed(1)}%` : ""}
                 color={stats.grossProfit >= 0 ? "emerald" : "red"} />
