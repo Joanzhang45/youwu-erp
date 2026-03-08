@@ -32,7 +32,7 @@ export default function Home() {
   const fetchStats = useCallback(async () => {
     try {
       const [prodRes, poRes, ordersRes, adsRes, expRes, selRes, logRes] = await Promise.all([
-        getSupabase().from("products").select("stock_qty, safety_stock", { count: "exact" }),
+        getSupabase().from("products").select("stock_qty, safety_stock, product_status", { count: "exact" }),
         getSupabase().from("purchase_orders").select("status_received, status_cancelled", { count: "exact" }),
         getSupabase().from("sales_orders").select("id", { count: "exact" }),
         getSupabase().from("ad_costs").select("amount"),
@@ -42,8 +42,9 @@ export default function Home() {
       ]);
 
       const products = prodRes.data || [];
-      const outOfStock = products.filter((p) => p.stock_qty <= 0).length;
-      const lowStock = products.filter(
+      const activeProducts = products.filter((p) => p.product_status !== "停售");
+      const outOfStock = activeProducts.filter((p) => p.stock_qty <= 0).length;
+      const lowStock = activeProducts.filter(
         (p) => p.stock_qty > 0 && p.safety_stock != null && p.stock_qty <= p.safety_stock
       ).length;
 
