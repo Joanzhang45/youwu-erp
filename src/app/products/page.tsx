@@ -419,7 +419,7 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Product List */}
+      {/* Product List — grouped by product_name */}
       <div className="px-4 py-2">
         {loading ? (
           <div className="text-center py-12 text-slate-400">載入中...</div>
@@ -427,27 +427,235 @@ export default function ProductsPage() {
           <div className="text-center py-12 text-slate-400">沒有符合的商品</div>
         ) : (
           <div className="space-y-2">
-            <p className="text-xs text-slate-400 px-1">顯示 {filtered.length} 項</p>
-            {filtered.map((p) => (
-              <div key={p.id}>
-                <ProductCard
-                  product={p}
-                  onEdit={() => startEdit(p)}
-                  isEditing={editingId === p.id}
-                />
-                {editingId === p.id && (
-                  <EditPanel
-                    form={editForm}
-                    setForm={setEditForm}
-                    onSave={saveEdit}
-                    onCancel={() => setEditingId(null)}
-                    saving={saving}
-                  />
-                )}
-              </div>
+            <p className="text-xs text-slate-400 px-1">
+              顯示 {groupProducts(filtered).length} 品項（{filtered.length} SKU）
+            </p>
+            {groupProducts(filtered).map((group) => (
+              <ProductGroup
+                key={group.name}
+                group={group}
+                editingId={editingId}
+                editForm={editForm}
+                setEditForm={setEditForm}
+                onEdit={startEdit}
+                onSave={saveEdit}
+                onCancelEdit={() => setEditingId(null)}
+                saving={saving}
+              />
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+interface ProductGroup {
+  name: string;
+  variants: Product[];
+  totalStock: number;
+  totalSold: number;
+  totalRevenue: number;
+  priceRange: string;
+  category: string | null;
+  status: string | null;
+}
+
+function groupProducts(products: Product[]): ProductGroup[] {
+  const map = new Map<string, Product[]>();
+  for (const p of products) {
+    const key = p.product_name;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(p);
+  }
+  const groups: ProductGroup[] = [];
+  for (const [name, variants] of map) {
+    const totalStock = variants.reduce((s, v) => s + (v.stock_qty || 0), 0);
+    const totalSold = variants.reduce((s, v) => s + (Number(v.total_sold_qty) || 0), 0);
+    const totalRevenue = variants.reduce((s, v) => s + (Number(v.total_sales_revenue) || 0), 0);
+    const prices = variants.map((v) => v.selling_price).filter((p): p is number => p != null && p > 0);
+    const minP = prices.length > 0 ? Math.min(...prices) : 0;
+    const maxP = prices.length > 0 ? Math.max(...prices) : 0;
+    const priceRange = minP === maxP ? (minP > 0 ? `$${minP}` : "—") : `$${minP}~${maxP}`;
+    groups.push({
+      name,
+      variants,
+      totalStock,
+      totalSold,
+      totalRevenue,
+      priceRange,
+      category: variants[0].category,
+      status: variants[0].product_status,
+    });
+  }
+  return groups;
+}
+
+function ProductGroup({
+  group,
+  editingId,
+  editForm,
+  setEditForm,
+  onEdit,
+  onSave,
+  onCancelEdit,
+  saving,
+}: {
+  group: ProductGroup;
+  editingId: number | null;
+  editForm: Partial<Product>;
+  setEditForm: (f: Partial<Product>) => void;
+  onEdit: (p: Product) => void;
+  onSave: () => void;
+  onCancelEdit: () => void;
+  saving: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isSingle = group.variants.length === 1;
+  const firstVariant = group.variants[0];
+  const status = STATUS_LABELS[group.status || ""] || { label: group.status || "—", color: "bg-slate-100 text-slate-500" };
+  const isOut = group.totalStock <= 0;
+  const hasLow = group.variants.some((v) => v.safety_stock != null && v.stock_qty > 0 && v.stock_qty <= v.safety_stock);
+
+  // For single-variant products, click opens edit directly
+  if (isSingle) {
+    return (
+      <div>
+        <ProductCard
+          product={firstVariant}
+          onEdit={() => onEdit(firstVariant)}
+          isEditing={editingId === firstVariant.id}
+        />
+        {editingId === firstVariant.id && (
+          <EditPanel
+            form={editForm}
+            setForm={setEditForm}
+            onSave={onSave}
+            onCancel={onCancelEdit}
+            saving={saving}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Multi-variant: show group header + expandable variants
+  return (
+    <div className={`bg-white rounded-xl shadow-sm border ${isOut ? "border-red-200" : hasLow ? "border-amber-200" : "border-slate-200"}`}>
+      {/* Group header */}
+      <div
+        className="flex items-center gap-3 p-3 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {/* Icon */}
+        <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 text-xl">
+          {group.category?.includes("燈") ? "💡" : group.category?.includes("廚") ? "🍳" : "📦"}
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-medium text-sm truncate">{group.name}</h3>
+            <div className="flex-shrink-0 text-right">
+              <div className="text-base font-bold">{group.priceRange}</div>
+              <div className={`text-[10px] ${isOut ? "text-red-500" : hasLow ? "text-amber-500" : "text-slate-400"}`}>
+                庫存 {group.totalStock}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${status.color}`}>
+              {status.label}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">
+              {group.variants.length} 款式
+            </span>
+            {group.category && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 rounded text-slate-500">
+                {group.category.length > 4 ? group.category.slice(0, 4) + "…" : group.category}
+              </span>
+            )}
+            {group.totalSold > 0 && (
+              <span className="text-[10px] text-slate-400">已售 {group.totalSold}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Chevron */}
+        <div className={`text-slate-400 text-sm transition-transform flex-shrink-0 ${expanded ? "rotate-180" : ""}`}>
+          ▼
+        </div>
+      </div>
+
+      {/* Expanded variants */}
+      {expanded && (
+        <div className="border-t px-3 pb-3 pt-2 space-y-1.5">
+          {group.variants.map((v) => (
+            <div key={v.id}>
+              <VariantRow
+                variant={v}
+                onEdit={() => onEdit(v)}
+                isEditing={editingId === v.id}
+              />
+              {editingId === v.id && (
+                <EditPanel
+                  form={editForm}
+                  setForm={setEditForm}
+                  onSave={onSave}
+                  onCancel={onCancelEdit}
+                  saving={saving}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VariantRow({
+  variant: v,
+  onEdit,
+  isEditing,
+}: {
+  variant: Product;
+  onEdit: () => void;
+  isEditing: boolean;
+}) {
+  const margin = v.gross_margin != null ? (v.gross_margin * 100).toFixed(1) : null;
+  const isOut = v.stock_qty <= 0;
+  const isLow = v.safety_stock != null && v.stock_qty > 0 && v.stock_qty <= v.safety_stock;
+
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer transition-all ${
+        isEditing
+          ? "bg-blue-50 border border-blue-300"
+          : "bg-slate-50 hover:bg-slate-100 border border-transparent"
+      }`}
+      onClick={onEdit}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium truncate">
+          {v.variant_name || "預設款式"}
+        </div>
+        <div className="flex gap-2 text-[10px] text-slate-400 mt-0.5 flex-wrap">
+          {v.selling_price != null && <span>售 ${v.selling_price}</span>}
+          {v.unit_cost_ntd != null && <span>成本 ${v.unit_cost_ntd.toFixed(0)}</span>}
+          {margin != null && (
+            <span className={Number(margin) >= 40 ? "text-emerald-600" : Number(margin) >= 20 ? "text-amber-600" : "text-red-500"}>
+              毛利 {margin}%
+            </span>
+          )}
+          {Number(v.total_sold_qty) > 0 && <span>已售 {v.total_sold_qty}</span>}
+        </div>
+      </div>
+      <div className="flex-shrink-0 text-right">
+        <div className={`text-sm font-bold ${isOut ? "text-red-500" : isLow ? "text-amber-500" : "text-slate-700"}`}>
+          {v.stock_qty}
+        </div>
+        <div className="text-[10px] text-slate-400">庫存</div>
       </div>
     </div>
   );
