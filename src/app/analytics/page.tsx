@@ -24,7 +24,7 @@ interface Stats {
 type Period = "all" | "month" | "week";
 
 function exportAnalyticsCSV(products: { product_name: string; variant_name?: string | null; selling_price: number | null; unit_cost_ntd: number | null; fees: number; profit: number; margin: number; totalProfit: number; stock_qty: number; total_sold_qty: number | null }[]) {
-  const headers = ["商品名稱","款式","售價","成本","平台費","單件利潤","毛利率","已售","總利潤","庫存"];
+  const headers = ["商品名稱","款式","售價","成本","平台費","單件利潤","預估毛利率","已售","總利潤","庫存"];
   const rows = products.map(p => [
     p.product_name,
     p.variant_name || "",
@@ -296,7 +296,7 @@ export default function AnalyticsPage() {
             {[
               { key: "profit" as const, label: "單件利潤" },
               { key: "total_profit" as const, label: "總利潤" },
-              { key: "margin" as const, label: "毛利率" },
+              { key: "margin" as const, label: "預估毛利" },
               { key: "stock" as const, label: "庫存" },
             ].map((s) => (
               <button

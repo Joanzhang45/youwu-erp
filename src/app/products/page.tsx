@@ -35,7 +35,7 @@ type SortKey = "product_name" | "selling_price" | "stock_qty" | "unit_cost_ntd" 
 type SortDir = "asc" | "desc";
 
 function exportCSV(products: Product[]) {
-  const headers = ["商品名稱","款式","SKU","分類","狀態","定位","售價","進貨價CNY","成本NTD","庫存","安全庫存","已售數量","總營收","毛利率","備註"];
+  const headers = ["商品名稱","款式","SKU","分類","狀態","定位","售價","進貨價CNY","成本NTD","庫存","安全庫存","已售數量","總營收","預估毛利率","備註"];
   const rows = products.map(p => [
     p.product_name,
     p.variant_name || "",
@@ -415,7 +415,7 @@ export default function ProductsPage() {
           <SortButton k="selling_price" label="售價" />
           <SortButton k="stock_qty" label="庫存" />
           <SortButton k="unit_cost_ntd" label="成本" />
-          <SortButton k="gross_margin" label="毛利率" />
+          <SortButton k="gross_margin" label="預估毛利" />
         </div>
       </div>
 
@@ -645,7 +645,7 @@ function VariantRow({
           {v.unit_cost_ntd != null && <span>成本 ${v.unit_cost_ntd.toFixed(0)}</span>}
           {margin != null && (
             <span className={Number(margin) >= 40 ? "text-emerald-600" : Number(margin) >= 20 ? "text-amber-600" : "text-red-500"}>
-              毛利 {margin}%
+              預估毛利 {margin}%
             </span>
           )}
           {Number(v.total_sold_qty) > 0 && <span>已售 {v.total_sold_qty}</span>}
@@ -750,7 +750,7 @@ function ProductCard({
             )}
             {margin != null && (
               <span className={`text-[10px] ${Number(margin) >= 40 ? "text-emerald-600" : Number(margin) >= 20 ? "text-amber-600" : "text-red-500"}`}>
-                毛利 {margin}%
+                預估毛利 {margin}%
               </span>
             )}
           </div>
