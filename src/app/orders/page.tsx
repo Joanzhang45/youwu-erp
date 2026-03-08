@@ -194,7 +194,13 @@ export default function OrdersPage() {
     if (!preview) return;
     setImporting(true);
     try {
-      const existingNums = new Set(orders.map((o) => o.order_number));
+      // Check against ALL orders in DB, not just current page
+      const previewNums = preview.map((o) => o.order_number).filter(Boolean) as string[];
+      const { data: existingData } = await getSupabase()
+        .from("sales_orders")
+        .select("order_number")
+        .in("order_number", previewNums);
+      const existingNums = new Set((existingData || []).map((o) => o.order_number));
       const newOrders = preview.filter((o) => !existingNums.has(o.order_number || ""));
 
       if (newOrders.length === 0) {
