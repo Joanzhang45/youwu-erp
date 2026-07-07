@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { getSupabase } from "@/lib/supabase";
+import { getSupabase, isDemo } from "@/lib/supabase";
 import type { Product } from "@/lib/database.types";
 import { DEMO_PRODUCTS } from "@/lib/demo-data";
 import { StockModal } from "@/components/StockModal";
@@ -18,8 +18,6 @@ interface ProductGroup {
   isLow: boolean;
   isOut: boolean;
 }
-
-const isDemo = !process.env.NEXT_PUBLIC_SUPABASE_URL;
 
 function isNotDiscontinued(p: Product): boolean {
   return p.product_status !== "停售";
