@@ -13,16 +13,24 @@
 """
 
 import json
+import os
 import urllib.request
 import ssl
 import time
 import sys
 
 # === 設定 ===
-RAGIC_API_KEY = "***REMOVED***"
+# 憑證改由環境變數注入，不再硬編碼；實際值見 vault 敏感憑證總表
+RAGIC_API_KEY = os.environ.get("RAGIC_API_KEY")
 RAGIC_BASE = "https://ap14.ragic.com/youwu"
 SUPABASE_URL = "https://nhwmmpiglfxhlnagusvp.supabase.co"
-SUPABASE_KEY = "***REMOVED***"
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+if not RAGIC_API_KEY or not SUPABASE_KEY:
+    sys.exit(
+        "缺少必要環境變數 RAGIC_API_KEY / SUPABASE_SERVICE_ROLE_KEY，"
+        "請先 export 後再執行。憑證見 vault 敏感憑證總表。"
+    )
 
 # Disable SSL verification for Windows compatibility
 ssl_ctx = ssl.create_default_context()

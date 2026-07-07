@@ -1,11 +1,18 @@
 """QA: 驗證所有 Supabase 資料完整性"""
-import json, urllib.request, ssl
+import json, os, sys, urllib.request, ssl
 
 ssl_ctx = ssl.create_default_context()
 ssl_ctx.check_hostname = False
 ssl_ctx.verify_mode = ssl.CERT_NONE
 SUPABASE_URL = "https://nhwmmpiglfxhlnagusvp.supabase.co"
-SUPABASE_KEY = "***REMOVED***"
+# 憑證改由環境變數注入，不再硬編碼；實際值見 vault 敏感憑證總表
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+if not SUPABASE_KEY:
+    sys.exit(
+        "缺少必要環境變數 SUPABASE_SERVICE_ROLE_KEY，請先 export 後再執行。"
+        "憑證見 vault 敏感憑證總表。"
+    )
 
 def query(table, select="*", extra=""):
     url = f"{SUPABASE_URL}/rest/v1/{table}?select={select}{extra}"
