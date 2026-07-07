@@ -41,7 +41,7 @@ export default function InventoryPage() {
     try {
       setLoading(true);
       const { data, error: err } = await getSupabase()
-        .from("products")
+        .from("v_products_with_stock")
         .select("*")
         .order("product_name");
 
@@ -154,18 +154,20 @@ export default function InventoryPage() {
       return;
     }
 
-    // stock_qty 是 generated column (= total_purchased_qty - total_shipped_qty)
-    // 入庫：增加 total_purchased_qty；出庫：增加 total_shipped_qty
-    const newPurchased = type === "in" ? product.total_purchased_qty + qty : product.total_purchased_qty;
-    const newShipped = type === "out" ? product.total_shipped_qty + qty : product.total_shipped_qty;
-    const { error: prodErr } = await getSupabase()
-      .from("products")
-      .update({
-        total_purchased_qty: newPurchased,
-        total_shipped_qty: newShipped,
-      })
-      .eq("id", product.id);
-    if (prodErr) throw prodErr;
+    // 手動調整走 inventory_ledger（庫存日誌制 pathway #4 manual_adjust），
+    // 不再直接改 products 聚合欄（那是 03-18 帳實不符根因）。
+    // ref_no 用 timestamp 保證唯一：每次點擊都是獨立事件，不需要跨路徑冪等去重。
+    const { error: ledgerErr } = await getSupabase()
+      .from("inventory_ledger")
+      .insert({
+        product_id: product.id,
+        movement_type: "manual_adjust",
+        qty_delta: type === "in" ? qty : -qty,
+        ref_type: "manual_adjust",
+        ref_no: `MA-${Date.now()}`,
+        note: notes || null,
+      });
+    if (ledgerErr) throw ledgerErr;
 
     setStockAction(null);
     fetchProducts();

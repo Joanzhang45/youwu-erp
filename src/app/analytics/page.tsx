@@ -80,7 +80,7 @@ export default function AnalyticsPage() {
     try {
       setLoading(true);
       const [prodRes, ordersRes, orderItemsRes, adsRes, expRes] = await Promise.all([
-        getSupabase().from("products").select("*").order("product_name"),
+        getSupabase().from("v_products_with_stock").select("*").order("product_name"),
         getSupabase().from("sales_orders").select("id, order_date, order_amount, net_revenue"),
         getSupabase().from("sales_order_items").select("order_id, product_id, qty"),
         getSupabase().from("ad_costs").select("amount, date"),

@@ -88,7 +88,7 @@ export default function ProductsPage() {
     try {
       setLoading(true);
       const [prodRes, itemsRes] = await Promise.all([
-        getSupabase().from("products").select("*").order("product_name"),
+        getSupabase().from("v_products_with_stock").select("*").order("product_name"),
         getSupabase().from("sales_order_items").select("product_id,variant_name"),
       ]);
       if (prodRes.error) throw prodRes.error;

@@ -136,8 +136,8 @@ function ReceivingContent() {
     if (!shipment) return;
     setSubmitting(true);
     let createdReceivingId: number | null = null;
-    const updatedProductIds: { id: number; prev: { total_purchased_qty: number; stock_qty: number; unit_cost_ntd: number | null; latest_po_number: string | null } }[] = [];
-    const createdMovementIds: number[] = [];
+    const updatedProductIds: { id: number; prev: { unit_cost_ntd: number | null; latest_po_number: string | null } }[] = [];
+    const createdItemIds: number[] = [];
 
     try {
       const totalShipmentCost = Number(shipment.total_cost_ntd) || 0;
@@ -159,6 +159,8 @@ function ReceivingContent() {
       createdReceivingId = rvData.id;
 
       // 2. Create receiving record items
+      // INSERT 會觸發 DB trigger 自動寫 inventory_ledger（purchase_receive），
+      // 見 supabase/migrations/004_ledger_pathways.sql；不再手動維護 products 聚合欄。
       const rvItems = items.map((item) => ({
         receiving_id: rvData.id,
         product_id: item.product_id,
@@ -169,19 +171,21 @@ function ReceivingContent() {
         discrepancy: item.actual_qty - item.expected_qty,
         condition: item.condition,
       }));
-      const { error: rvItemErr } = await getSupabase()
+      const { data: rvItemData, error: rvItemErr } = await getSupabase()
         .from("receiving_record_items")
-        .insert(rvItems);
+        .insert(rvItems)
+        .select("id");
       if (rvItemErr) throw rvItemErr;
+      if (rvItemData) createdItemIds.push(...rvItemData.map((r) => r.id));
 
-      // 3. For each item, update product stock and calculate landed cost
+      // 3. For each item, calculate landed cost（庫存數量已由步驟 2 的 trigger 處理）
       for (const item of items) {
         if (!item.product_id || item.actual_qty <= 0) continue;
 
         // Get current product data for cost calculation
         const { data: product } = await getSupabase()
           .from("products")
-          .select("purchase_price_cny, weight_kg, total_purchased_qty, stock_qty, unit_cost_ntd, latest_po_number")
+          .select("purchase_price_cny, weight_kg, unit_cost_ntd, latest_po_number")
           .eq("id", item.product_id)
           .single();
 
@@ -191,8 +195,6 @@ function ReceivingContent() {
         updatedProductIds.push({
           id: item.product_id,
           prev: {
-            total_purchased_qty: product.total_purchased_qty || 0,
-            stock_qty: product.stock_qty || 0,
             unit_cost_ntd: product.unit_cost_ntd,
             latest_po_number: product.latest_po_number,
           },
@@ -213,36 +215,14 @@ function ReceivingContent() {
           : 0;
         const landedCostPerUnit = costBeforeShipping + shippingPerUnit;
 
-        // Update product
-        const newPurchasedQty = (product.total_purchased_qty || 0) + item.actual_qty;
-        const newStockQty = (product.stock_qty || 0) + item.actual_qty;
-
         const { error: prodErr } = await getSupabase()
           .from("products")
           .update({
             unit_cost_ntd: Math.round(landedCostPerUnit * 100) / 100,
-            total_purchased_qty: newPurchasedQty,
-            stock_qty: newStockQty,
             latest_po_number: shipment.shipment_number,
           })
           .eq("id", item.product_id);
         if (prodErr) throw prodErr;
-
-        // Create stock movement
-        const { data: mvData, error: mvErr } = await getSupabase()
-          .from("stock_movements")
-          .insert({
-            product_id: item.product_id,
-            movement_type: "in",
-            qty: item.actual_qty,
-            reference_type: "receiving",
-            notes: `驗收入庫 ${receivingNumber}`,
-            created_by: "receiving",
-          })
-          .select("id")
-          .single();
-        if (mvErr) throw mvErr;
-        if (mvData) createdMovementIds.push(mvData.id);
       }
 
       // 4. Update shipment status
@@ -261,8 +241,13 @@ function ReceivingContent() {
         for (const { id, prev } of updatedProductIds) {
           await getSupabase().from("products").update(prev).eq("id", id);
         }
-        for (const mvId of createdMovementIds) {
-          await getSupabase().from("stock_movements").delete().eq("id", mvId);
+        if (createdItemIds.length > 0) {
+          // 清掉 trigger 自動寫入的 ledger（ref_type/ref_no 對應 receiving_record_items.id）
+          await getSupabase()
+            .from("inventory_ledger")
+            .delete()
+            .eq("ref_type", "receiving_record_item")
+            .in("ref_no", createdItemIds.map(String));
         }
         if (createdReceivingId) {
           await getSupabase().from("receiving_record_items").delete().eq("receiving_id", createdReceivingId);

@@ -37,7 +37,7 @@ export default function Home() {
     }
     try {
       const [prodRes, poRes, ordersRes, adsRes, expRes, selRes, logRes] = await Promise.all([
-        getSupabase().from("products").select("stock_qty, safety_stock, product_status", { count: "exact" }),
+        getSupabase().from("v_products_with_stock").select("stock_qty, safety_stock, product_status", { count: "exact" }),
         getSupabase().from("purchase_orders").select("status_received, status_cancelled", { count: "exact" }),
         getSupabase().from("sales_orders").select("id", { count: "exact" }),
         getSupabase().from("ad_costs").select("amount"),
