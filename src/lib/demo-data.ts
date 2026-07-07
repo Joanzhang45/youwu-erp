@@ -1,5 +1,18 @@
 import type { Product } from "./database.types";
 
+// 首頁 Dashboard 快速統計卡的展示模式數字。純虛構，故意避開真實營運數字量級
+// （真實月營收約 1.4~4.4 萬、淨利累計 3 萬多），數字挑好看的整數方便作品集展示。
+export const DEMO_DASHBOARD_STATS = {
+  inventory: "2 缺貨、5 低庫存",
+  products: "86 項商品",
+  selections: "12 筆評估中",
+  purchase: "4 單進行中",
+  logistics: "6 筆運送中",
+  orders: "312 筆訂單",
+  expenses: "$128,000",
+  analytics: null,
+};
+
 // Demo data from actual Ragic export (subset)
 // Using 'as Product[]' since demo data omits fields that have DB defaults
 export const DEMO_PRODUCTS = [

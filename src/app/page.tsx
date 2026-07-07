@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { getSupabase } from "@/lib/supabase";
+import { getSupabase, isDemo } from "@/lib/supabase";
+import { DEMO_DASHBOARD_STATS } from "@/lib/demo-data";
 
 const modules = [
   { href: "/inventory", label: "庫存管理", desc: "查看庫存、出入庫", icon: "📦", statKey: "inventory" as const },
@@ -30,6 +31,10 @@ export default function Home() {
   const [stats, setStats] = useState<QuickStats | null>(null);
 
   const fetchStats = useCallback(async () => {
+    if (isDemo) {
+      setStats(DEMO_DASHBOARD_STATS);
+      return;
+    }
     try {
       const [prodRes, poRes, ordersRes, adsRes, expRes, selRes, logRes] = await Promise.all([
         getSupabase().from("products").select("stock_qty, safety_stock, product_status", { count: "exact" }),
@@ -92,6 +97,13 @@ export default function Home() {
         <h1 className="text-2xl font-bold">有物製所 ERP</h1>
         <p className="text-slate-300 text-sm mt-1">庫存與營運管理系統</p>
       </header>
+
+      {/* Demo Banner */}
+      {isDemo && (
+        <div className="bg-amber-400 text-amber-900 text-xs text-center py-1 font-medium">
+          展示模式 — 資料為模擬，請設定 Supabase 連線
+        </div>
+      )}
 
       {/* Alert Banner */}
       {stats?.inventory && stats.inventory.includes("缺貨") && (
