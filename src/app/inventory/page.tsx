@@ -156,16 +156,8 @@ export default function InventoryPage() {
       return;
     }
 
-    const { error: mvErr } = await getSupabase().from("stock_movements").insert({
-      product_id: product.id,
-      movement_type: type,
-      qty,
-      reference_type: "adjustment",
-      notes,
-      created_by: "manual",
-    });
-    if (mvErr) throw mvErr;
-
+    // stock_qty 是 generated column (= total_purchased_qty - total_shipped_qty)
+    // 入庫：增加 total_purchased_qty；出庫：增加 total_shipped_qty
     const newPurchased = type === "in" ? product.total_purchased_qty + qty : product.total_purchased_qty;
     const newShipped = type === "out" ? product.total_shipped_qty + qty : product.total_shipped_qty;
     const { error: prodErr } = await getSupabase()
@@ -173,7 +165,6 @@ export default function InventoryPage() {
       .update({
         total_purchased_qty: newPurchased,
         total_shipped_qty: newShipped,
-        stock_qty: newPurchased - newShipped,
       })
       .eq("id", product.id);
     if (prodErr) throw prodErr;
