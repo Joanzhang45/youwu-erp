@@ -5,12 +5,29 @@ import-shopee-monthly.py — 有物 ERP Stage A Phase 3 資料回補 + 未來「
 1. 解密＋解析蝦皮月度訂單 xlsx（AES 加密），匯入 sales_orders + sales_order_items
 2. 解析蝦皮廣告 CSV（週報／月報格式皆支援），匯入 ad_costs
 3. 商品對應：沿用 remap_all.py 驗證過的規則（PRODUCT_RULES + COLOR_MAP + SIZE_PATTERNS）
-4. 冪等：訂單編號（order_number）已存在 → 整單 skip；廣告費依期間起始日（ad_date）已存在 → skip
-5. 已取消單 trigger 盲點處理：訂單匯入時若原始狀態已是終態取消（僅「不成立」，見下方判斷理由），
-   先用暫存狀態插入（不觸發回沖）→ items 正常插入（AFTER INSERT trigger 記 sale_ship）→
-   再 UPDATE 回真實狀態（AFTER UPDATE trigger 觸發 return_reversal 回沖），淨庫存效果歸零。
-   （選用此法而非「product_id 留空」，因為 product_id 留空會讓該筆訂單的商品從未被庫存系統看見，
-   不利未來月度盤點對帳；本法完整走過既有已驗證的 trigger 路徑，Phase 2 五段自測已驗證此模式。）
+4. 冪等（2026-07-11 修正「狀態快照凍死」技術債，見 技術筆記/踩坑速查.md）：
+   - 訂單編號（order_number）不存在 → 新增（邏輯不變）
+   - 訂單編號已存在，DB 狀態已是終態（'不成立' 或 不含「鑑賞期」字樣的「已完成」）→ skip
+     （終態不可逆，防新檔比 DB 舊把終態改回進行中）
+   - 訂單編號已存在，DB 狀態非終態且與本次檔案狀態不同 → UPDATE status（見下方 #6）
+   - 廣告費依期間起始日（ad_date）已存在 → skip
+5. 已取消單 trigger 盲點處理（新增訂單路徑）：訂單匯入時若原始狀態已是終態取消（僅「不成立」，
+   見下方判斷理由），先用暫存狀態插入（不觸發回沖）→ items 正常插入（AFTER INSERT trigger 記
+   sale_ship）→ 再 UPDATE 回真實狀態（AFTER UPDATE trigger 觸發 return_reversal 回沖），淨庫存
+   效果歸零。（選用此法而非「product_id 留空」，因為 product_id 留空會讓該筆訂單的商品從未被
+   庫存系統看見，不利未來月度盤點對帳；本法完整走過既有已驗證的 trigger 路徑，Phase 2 五段自測
+   已驗證此模式。）
+6. 既有訂單狀態變化（status-upsert 路徑）：只 UPDATE sales_orders.status，不自己寫
+   inventory_ledger——真正轉為「不成立」時讓 004 migration 的 trg_sales_orders_cancel_ledger
+   trigger 自動回沖。但該 trigger 的觸發 regex 較寬（'不成立|取消|退貨|退款|cancel|refund|return'），
+   對「已完成(鑑賞期內)，但買家仍可…申請退貨/退款。」這類「已完成」子狀態文字會誤判——這類單
+   從未取消，只是提醒買家鑑賞期未過。故本腳本轄下的終態判斷全部用精確字串比對（見
+   is_terminal_cancel／is_db_status_terminal），且對「非取消但文字誤中 trigger regex」的狀態
+   更新，寫入前先 ALTER TABLE ... DISABLE TRIGGER 該筆更新完再 ENABLE，避免誤觸發回沖動到不該
+   動的庫存（見 apply_status_update）。
+
+SOP（配合本次修正，避免下次又凍死於快照）：每月匯出蝦皮訂單時，日期區間務必比當月往回多抓
+45 天（涵蓋鑑賞期＋超取物流窗），讓本腳本的狀態滾動更新邏輯有機會追上退貨/翻案。
 
 環境變數（必須，禁止硬編碼）：
   DATABASE_URL          postgresql://user:password@host:port/dbname?sslmode=require
@@ -308,6 +325,12 @@ def resolve_product_id(cur, prod_by_name, shopee_product_name, shopee_variant_na
 def decrypt_xlsx_to_stream(path, password):
     with open(path, 'rb') as fp:
         office_file = msoffcrypto.OfficeFile(fp)
+        if not office_file.is_encrypted():
+            # ponytail-debt: 蝦皮匯出檔理論上都加密，但偵測/驗證場景可能拿到已手動解密過的檔案
+            # （如本次驗收測資）；直接讀取原始 bytes 放行，比對加密與否的判斷已由 msoffcrypto
+            # 內建 is_encrypted() 提供，非自建判斷邏輯，風險低。
+            fp.seek(0)
+            return io.BytesIO(fp.read())
         office_file.load_key(password=password)
         decrypted = io.BytesIO()
         office_file.decrypt(decrypted)
@@ -378,6 +401,51 @@ def is_terminal_cancel(raw_status):
     return raw_status in TERMINAL_CANCEL_STATUSES
 
 
+def is_db_status_terminal(db_status):
+    """
+    判斷 DB 現有狀態是否已是「終態」（不可逆，新檔比 DB 舊時不能改回進行中）：
+    - '不成立'：終態取消
+    - 以「已完成」開頭且不含「鑑賞期」字樣：真正完結，鑑賞期已過或本來就無鑑賞期子狀態
+    「已完成(鑑賞期內)…」不算終態——鑑賞期內買家仍可能申請退貨，狀態還可能再變。
+    """
+    if not db_status:
+        return False
+    if is_terminal_cancel(db_status):
+        return True
+    if db_status.startswith('已完成') and '鑑賞期' not in db_status:
+        return True
+    return False
+
+
+# 004 migration trg_sales_orders_cancel_reversal 的觸發 regex（刻意保持寬鬆，覆蓋未來蝦皮可能
+# 出現的其他退貨/取消措辭）。本腳本的 status-upsert 路徑寫入非終態取消的新狀態前，若文字誤中
+# 這個寬鬆 regex（例如「已完成(鑑賞期內)，但買家仍可…申請退貨/退款。」含「退貨」「退款」），
+# 必須先停用該 trigger 再寫，避免誤觸發 return_reversal 動到不該動的庫存。
+CANCEL_TRIGGER_MISFIRE_PATTERN = re.compile(r'不成立|取消|退貨|退款|cancel|refund|return', re.IGNORECASE)
+
+
+def would_misfire_cancel_trigger(new_status):
+    return bool(CANCEL_TRIGGER_MISFIRE_PATTERN.search(new_status or ''))
+
+
+def apply_status_update(cur, order_id, new_status):
+    """
+    UPDATE sales_orders.status，不自己寫 inventory_ledger：
+    - 真正終態取消（is_terminal_cancel 精確比對）→ 直接 UPDATE，讓 004 trigger 照常觸發回沖
+      （這是我們想要的效果，訂單真的取消了）
+    - 非終態取消但新狀態文字誤中 trigger 的寬鬆 regex → 更新前後暫停/恢復該 trigger，
+      避免誤回沖（見上方 CANCEL_TRIGGER_MISFIRE_PATTERN 說明）
+    - 其餘一般狀態更新 → 直接 UPDATE
+    """
+    cancel_now = is_terminal_cancel(new_status)
+    guard = (not cancel_now) and would_misfire_cancel_trigger(new_status)
+    if guard:
+        cur.execute("ALTER TABLE sales_orders DISABLE TRIGGER trg_sales_orders_cancel_ledger;")
+    cur.execute("UPDATE sales_orders SET status = %s WHERE id = %s;", (new_status, order_id))
+    if guard:
+        cur.execute("ALTER TABLE sales_orders ENABLE TRIGGER trg_sales_orders_cancel_ledger;")
+
+
 # ============================================================
 # 廣告 CSV 解析（週報／月報格式皆支援；欄位用表頭名稱查找，不寫死欄位序號）
 # ============================================================
@@ -429,10 +497,11 @@ def import_orders(conn, orders_dir, xlsx_password, dry_run):
     prod_by_name = build_product_index(cur)
 
     stats = {'files': {}, 'total_orders_seen': 0, 'total_orders_inserted': 0,
-              'total_orders_skipped_existing': 0, 'total_items_inserted': 0,
-              'total_items_unmapped': 0, 'cancel_orders_reversed': 0}
+              'total_orders_skipped_existing': 0, 'total_orders_status_updated': 0,
+              'total_items_inserted': 0, 'total_items_unmapped': 0, 'cancel_orders_reversed': 0}
     unmapped_log = []
     created_log = []
+    status_updated_log = []  # (order_number, old_status, new_status)
 
     for f in files:
         fname = os.path.basename(f)
@@ -442,13 +511,26 @@ def import_orders(conn, orders_dir, xlsx_password, dry_run):
         seen = len(orders)
         inserted = 0
         skipped_existing = 0
+        status_updated = 0
         items_inserted = 0
         items_unmapped = 0
 
         for onum, o in orders.items():
-            cur.execute("SELECT id FROM sales_orders WHERE order_number = %s;", (onum,))
-            if cur.fetchone():
-                skipped_existing += 1
+            cur.execute("SELECT id, status FROM sales_orders WHERE order_number = %s;", (onum,))
+            existing = cur.fetchone()
+            if existing:
+                existing_id, existing_status = existing
+                new_raw_status = o['raw_status']
+                if not new_raw_status or is_db_status_terminal(existing_status) \
+                        or existing_status == new_raw_status:
+                    # 空狀態不覆蓋／DB 已終態不可逆／狀態沒變 → 都算 skip，不動 DB
+                    skipped_existing += 1
+                    continue
+                # 跟既有 INSERT 路徑一致：這裡不特判 dry_run，一律真的執行 UPDATE，
+                # dry-run 的「不寫入」保證統一由 main() 最後的 ROLLBACK 負責。
+                apply_status_update(cur, existing_id, new_raw_status)
+                status_updated += 1
+                status_updated_log.append((onum, existing_status, new_raw_status))
                 continue
 
             terminal_cancel = is_terminal_cancel(o['raw_status'])
@@ -491,17 +573,20 @@ def import_orders(conn, orders_dir, xlsx_password, dry_run):
             inserted += 1
 
         stats['files'][fname] = {'seen': seen, 'inserted': inserted, 'skipped_existing': skipped_existing,
+                                   'status_updated': status_updated,
                                    'items_inserted': items_inserted, 'items_unmapped': items_unmapped}
         stats['total_orders_seen'] += seen
         stats['total_orders_inserted'] += inserted
         stats['total_orders_skipped_existing'] += skipped_existing
+        stats['total_orders_status_updated'] += status_updated
         stats['total_items_inserted'] += items_inserted
         stats['total_items_unmapped'] += items_unmapped
-        print(f'  訂單: 原始 {seen} 筆 / 新增 {inserted} 筆 / 已存在跳過 {skipped_existing} 筆')
+        print(f'  訂單: 原始 {seen} 筆 / 新增 {inserted} 筆 / 狀態更新 {status_updated} 筆 / '
+              f'已存在跳過 {skipped_existing} 筆')
         print(f'  品項: 新增 {items_inserted} 筆 / 未對應商品 {items_unmapped} 筆')
 
     cur.close()
-    return stats, unmapped_log, created_log
+    return stats, unmapped_log, created_log, status_updated_log
 
 
 def import_ads(conn, ads_dir):
@@ -593,17 +678,24 @@ def main():
 
     conn = psycopg2.connect(db_url)
     try:
-        order_stats, unmapped_log, created_log = import_orders(conn, args.orders_dir, xlsx_password, args.dry_run)
+        order_stats, unmapped_log, created_log, status_updated_log = import_orders(
+            conn, args.orders_dir, xlsx_password, args.dry_run)
         ad_stats = import_ads(conn, args.ads_dir)
         dup_count = verify_seam(conn)
         cancel_fail_count = verify_cancel_net_zero(conn)
 
         print('\n========== 總結 ==========')
         print(f'訂單: 原始看到 {order_stats["total_orders_seen"]} 筆 / 新增 {order_stats["total_orders_inserted"]} 筆 / '
+              f'狀態更新 {order_stats["total_orders_status_updated"]} 筆 / '
               f'已存在跳過 {order_stats["total_orders_skipped_existing"]} 筆')
         print(f'品項: 新增 {order_stats["total_items_inserted"]} 筆 / 未對應商品 {order_stats["total_items_unmapped"]} 筆')
         print(f'取消單（回沖）處理: {order_stats["cancel_orders_reversed"]} 筆')
         print(f'廣告費: 原始 {ad_stats["seen"]} 份 / 新增 {ad_stats["inserted"]} 筆 / 已存在跳過 {ad_stats["skipped_existing"]} 筆')
+
+        if status_updated_log:
+            print(f'\n狀態更新明細（{len(status_updated_log)} 筆）：')
+            for onum, old_status, new_status in status_updated_log:
+                print(f'  訂單{onum} | {old_status!r} -> {new_status!r}')
 
         if created_log:
             print(f'\n自動建立的新商品款式（{len(created_log)} 筆，沿用姊妹款成本/售價基準）：')
