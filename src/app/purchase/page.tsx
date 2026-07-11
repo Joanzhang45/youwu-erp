@@ -22,6 +22,7 @@ const STATUS_STEPS = [
 
 function getCurrentStatus(po: PurchaseOrder): string {
   if (po.status_cancelled) return "已取消";
+  if (po.status_abnormal && po.status_abnormal > 0) return "異常";
   for (let i = STATUS_STEPS.length - 1; i >= 0; i--) {
     if (po[STATUS_STEPS[i].key as keyof PurchaseOrder]) return STATUS_STEPS[i].label;
   }
@@ -30,6 +31,7 @@ function getCurrentStatus(po: PurchaseOrder): string {
 
 function getStatusColor(status: string): string {
   if (status === "已取消") return "bg-red-100 text-red-700";
+  if (status === "異常") return "bg-red-100 text-red-700";
   if (status === "已到貨") return "bg-emerald-100 text-emerald-700";
   if (status === "草稿") return "bg-slate-100 text-slate-600";
   return "bg-blue-100 text-blue-700";
