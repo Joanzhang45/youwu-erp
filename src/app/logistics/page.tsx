@@ -16,9 +16,10 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   "已入倉": { label: "已入倉", color: "bg-purple-100 text-purple-700" },
   "已入庫": { label: "已入庫", color: "bg-purple-100 text-purple-700" },
   "異常": { label: "異常", color: "bg-red-100 text-red-700" },
+  "取消": { label: "取消", color: "bg-gray-200 text-gray-600" },
 };
 
-const STATUS_OPTIONS = ["待寄出", "已寄出", "運送中", "已到達", "已入倉", "異常"];
+const STATUS_OPTIONS = ["待寄出", "已寄出", "運送中", "已到達", "已入倉", "異常", "取消"];
 
 type FilterType = "all" | "active" | "arrived" | "abnormal";
 

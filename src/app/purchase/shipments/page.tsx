@@ -13,6 +13,7 @@ const STATUS_COLORS: Record<string, string> = {
   運送中: "bg-amber-100 text-amber-700",
   已到達: "bg-emerald-100 text-emerald-700",
   已驗收: "bg-purple-100 text-purple-700",
+  已入庫: "bg-purple-100 text-purple-700",
 };
 
 export default function ShipmentsPage() {
