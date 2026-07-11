@@ -133,11 +133,13 @@ export default function InsightsPage() {
       setLoading(true);
       const supabase = getSupabase();
       const [monthlyRes, prodRes] = await Promise.all([
+        // limit 14（不是 6）：損益卡要跟著「本月／上月／自訂區間」切換，自訂區間可能選到
+        // 超過 6 個月前，卡片要有資料可查；趨勢圖仍只取最新 6 個月（見下方 slice(0,6)）。
         supabase
           .from("v_monthly_profitability")
           .select("month, order_count, total_revenue, total_net_revenue, total_cogs, gross_profit, total_ad_cost, total_expenses, net_profit")
           .order("month", { ascending: false })
-          .limit(6),
+          .limit(14),
         supabase
           .from("products")
           .select("id, product_name, variant_name, product_image, selling_price, unit_cost_ntd, platform_fee_rate, product_status")
@@ -179,23 +181,68 @@ export default function InsightsPage() {
     setExpanded(false);
   }, [period, customFrom, customTo, rankTab]);
 
-  const now = new Date();
-  const thisMonthStr = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-01`;
-  // 誠實顯示：本月若還沒有任何訂單/廣告/費用列，v_monthly_profitability 不會有這一列，
-  // 落到 0 而不是偷用上個月數字冒充（同 /today 既有寫法）
-  const headline = monthly.find((m) => m.month === thisMonthStr) ?? {
-    month: thisMonthStr,
-    order_count: 0,
-    total_revenue: 0,
-    total_net_revenue: 0,
-    total_cogs: 0,
-    gross_profit: 0,
-    total_ad_cost: 0,
-    total_expenses: 0,
-    net_profit: 0,
-  };
-
   const range = useMemo(() => getPeriodRange(period, customFrom, customTo), [period, customFrom, customTo]);
+
+  // Blocker 修復（tester 2026-07-12）：損益卡原本寫死永遠找「本月」那一列，完全沒讀
+  // period/range，切「上月」「自訂」時排行表會變、卡片卻紋風不動。改成卡片標題與四個
+  // 數字都跟著 period 走，資料源仍是 v_monthly_profitability（不新增查詢，用同一批已抓
+  // 回來的 monthly 列，只是依 period 決定要哪一列／哪幾列)。
+  const { headlineTitle, headline } = useMemo(() => {
+    const zero = {
+      month: "",
+      order_count: 0,
+      total_revenue: 0,
+      total_net_revenue: 0,
+      total_cogs: 0,
+      gross_profit: 0,
+      total_ad_cost: 0,
+      total_expenses: 0,
+      net_profit: 0,
+    };
+    const now = new Date();
+
+    if (period === "month") {
+      const key = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-01`;
+      // 誠實顯示：本月若還沒有任何訂單/廣告/費用列，v_monthly_profitability 不會有這一列，
+      // 落到 0 而不是偷用上個月數字冒充（同 /today 既有寫法）
+      return { headlineTitle: "本月損益", headline: monthly.find((m) => m.month === key) ?? { ...zero, month: key } };
+    }
+
+    if (period === "lastMonth") {
+      const m = now.getMonth() - 1;
+      const y = m < 0 ? now.getFullYear() - 1 : now.getFullYear();
+      const key = `${y}-${pad2(((m % 12) + 12) % 12 + 1)}-01`;
+      return { headlineTitle: "上月損益", headline: monthly.find((m2) => m2.month === key) ?? { ...zero, month: key } };
+    }
+
+    // 自訂區間：v_monthly_profitability 是月粒度，起訖若落在同一個月直接取那一列；
+    // 跨月則把區間覆蓋到的整月列加總（近似值——起訖若非整月邊界，加總會含到區間外
+    // 的日子，這是月粒度 view 的已知限制，不在本次任務範圍內建日粒度 view）。
+    if (!customFrom || !customTo) {
+      return { headlineTitle: "自訂區間損益", headline: zero };
+    }
+    const fromKey = `${customFrom.slice(0, 7)}-01`;
+    const toKey = `${customTo.slice(0, 7)}-01`;
+    const matched = monthly.filter((m) => m.month >= fromKey && m.month <= toKey);
+    if (matched.length === 0) {
+      return { headlineTitle: "自訂區間損益", headline: zero };
+    }
+    const agg = matched.reduce(
+      (acc, m) => ({
+        ...acc,
+        order_count: acc.order_count + m.order_count,
+        total_revenue: acc.total_revenue + m.total_revenue,
+        total_net_revenue: acc.total_net_revenue + m.total_net_revenue,
+        total_cogs: acc.total_cogs + m.total_cogs,
+        gross_profit: acc.gross_profit + m.gross_profit,
+        total_ad_cost: acc.total_ad_cost + m.total_ad_cost,
+        total_expenses: acc.total_expenses + m.total_expenses,
+        net_profit: acc.net_profit + m.net_profit,
+      }),
+      zero
+    );
+    return { headlineTitle: "自訂區間損益", headline: agg };
+  }, [period, customFrom, customTo, monthly]);
 
   const ranked = useMemo(() => {
     const eligible = products.filter((p) => p.selling_price && p.selling_price > 0 && p.product_status !== "停售");
@@ -244,9 +291,53 @@ export default function InsightsPage() {
           <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
         ) : (
           <div className="space-y-5 app-fade-up-enter">
-            {/* 本月損益卡（A9：桌機 1280 首屏含本月營收／毛利，金額全千分位） */}
+            {/* 期間篩選：搬到最上面、脫離「商品排行」卡——這是整頁共用的期間控制（同時
+                驅動下面損益卡＋商品排行），原本塞在商品排行卡內容易讓人誤以為只影響排行榜
+                （tester 2026-07-12 blocker：切期間損益卡沒反應，根因是資料沒接，這裡順手把
+                UI 層級也理順，不然邏輯修好了但位置還是看起來像只管排行榜）。
+                按鈕 min-h-11(44px) 是觸控熱區下限（design-taste 規範），原本 py-1.5 量到只有
+                ~33px，順手補齊。 */}
+            <div className="flex flex-wrap items-center gap-2">
+              {([
+                { key: "month" as const, label: "本月" },
+                { key: "lastMonth" as const, label: "上月" },
+                { key: "custom" as const, label: "自訂" },
+              ]).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setPeriod(t.key)}
+                  className={`min-h-11 px-4 flex items-center justify-center rounded-full border text-xs transition-colors duration-150 ${
+                    period === t.key
+                      ? "bg-[#171717] text-white border-[#171717]"
+                      : "bg-white text-[#666666] border-[#EAEAEA] hover:border-[#171717]"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+              {period === "custom" && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="min-h-11 px-2 border border-[#EAEAEA] rounded-lg outline-none focus:border-[#171717] text-xs"
+                  />
+                  <span className="text-[#8F8F8F] text-xs">至</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="min-h-11 px-2 border border-[#EAEAEA] rounded-lg outline-none focus:border-[#171717] text-xs"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* 損益卡（A9：桌機 1280 首屏含本月營收／毛利，金額全千分位）——標題與數字
+                跟著上面「期間篩選」pills 走，見 headline useMemo */}
             <section className="rounded-2xl border border-[#EAEAEA] p-5">
-              <p className="text-xs font-medium text-[#8F8F8F] mb-3">本月損益</p>
+              <p className="text-xs font-medium text-[#8F8F8F] mb-3">{headlineTitle}</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <p className="text-2xl sm:text-3xl font-semibold text-[#171717] tabular-nums">
@@ -279,15 +370,17 @@ export default function InsightsPage() {
               </div>
             </section>
 
-            {/* 月度趨勢 */}
+            {/* 月度趨勢（固定近 6 個月，不受上面期間篩選影響——見 PRD §5「月度趨勢」與
+                「商品排行期間篩選」是兩個獨立需求，monthly 抓 14 個月是為了損益卡自訂區間
+                查得到更早的月份，這裡仍只切最新 6 個月畫圖） */}
             <section className="rounded-2xl border border-[#EAEAEA] p-5">
               <p className="text-xs font-medium text-[#8F8F8F] mb-3">近 6 個月營收／淨利</p>
-              <MonthlyTrendChart data={monthly} />
+              <MonthlyTrendChart data={monthly.slice(0, 6)} />
             </section>
 
-            {/* 商品排行 */}
+            {/* 商品排行（沿用上面同一組期間篩選 state，只多一個 Top/Bottom 切換） */}
             <section className="rounded-2xl border border-[#EAEAEA] p-5">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-4">
                 <p className="text-xs font-medium text-[#8F8F8F]">商品排行</p>
                 <div className="flex gap-1 bg-[#FAFAFA] p-0.5 rounded-lg border border-[#EAEAEA]">
                   {([
@@ -297,7 +390,7 @@ export default function InsightsPage() {
                     <button
                       key={t.key}
                       onClick={() => setRankTab(t.key)}
-                      className={`text-xs px-2.5 py-1 rounded-md transition-colors duration-150 ${
+                      className={`min-h-11 px-3 flex items-center justify-center rounded-md text-xs transition-colors duration-150 ${
                         rankTab === t.key ? "bg-white text-[#171717] font-medium shadow-sm" : "text-[#8F8F8F]"
                       }`}
                     >
@@ -305,44 +398,6 @@ export default function InsightsPage() {
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* 期間篩選 */}
-              <div className="flex flex-wrap items-center gap-1.5 mb-4">
-                {([
-                  { key: "month" as const, label: "本月" },
-                  { key: "lastMonth" as const, label: "上月" },
-                  { key: "custom" as const, label: "自訂" },
-                ]).map((t) => (
-                  <button
-                    key={t.key}
-                    onClick={() => setPeriod(t.key)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors duration-150 ${
-                      period === t.key
-                        ? "bg-[#171717] text-white border-[#171717]"
-                        : "bg-white text-[#666666] border-[#EAEAEA] hover:border-[#171717]"
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-                {period === "custom" && (
-                  <div className="flex items-center gap-1.5 ml-1">
-                    <input
-                      type="date"
-                      value={customFrom}
-                      onChange={(e) => setCustomFrom(e.target.value)}
-                      className="text-xs px-2 py-1.5 border border-[#EAEAEA] rounded-lg outline-none focus:border-[#171717]"
-                    />
-                    <span className="text-[#8F8F8F] text-xs">至</span>
-                    <input
-                      type="date"
-                      value={customTo}
-                      onChange={(e) => setCustomTo(e.target.value)}
-                      className="text-xs px-2 py-1.5 border border-[#EAEAEA] rounded-lg outline-none focus:border-[#171717]"
-                    />
-                  </div>
-                )}
               </div>
 
               {period === "custom" && (!customFrom || !customTo) ? (

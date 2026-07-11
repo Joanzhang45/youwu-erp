@@ -300,6 +300,10 @@ export default function TodayPage() {
                     <p className="text-[11px] text-[#8F8F8F] mt-0.5">本月淨利</p>
                   </div>
                   <div>
+                    {/* 附帶 2 修復（tester 2026-07-12）：舊寫法「125（1 項低庫存）」把缺貨/低庫存
+                        兩個不同指標用括號嵌在一起，讀起來像同一件事的附註，量級差 100 倍時特別
+                        突兀。改成大數字直接標單位＋用 · 並列第二個獨立指標，兩者視覺對等、語意
+                        分開。數字源不變，仍是 v_dashboard_kpi 的 out_of_stock_count/low_stock_count。 */}
                     <p
                       className={`text-2xl font-semibold tabular-nums ${
                         data.kpi.outOfStock > 0 ? "text-[#E00]" : "text-[#171717]"
@@ -307,7 +311,7 @@ export default function TodayPage() {
                     >
                       {data.kpi.outOfStock}
                     </p>
-                    <p className="text-[11px] text-[#8F8F8F] mt-0.5">缺貨（{data.kpi.lowStock} 項低庫存）</p>
+                    <p className="text-[11px] text-[#8F8F8F] mt-0.5">項缺貨 · {data.kpi.lowStock} 項低庫存</p>
                   </div>
                 </div>
               </Link>

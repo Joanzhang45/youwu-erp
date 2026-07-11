@@ -104,11 +104,18 @@ export const DEMO_LAST_STOCKTAKE_DAYS = 23;
 // month 用真實「現在」往回推算，作品集展示才不會日期一眼看出是舊資料；
 // 金額本身仍沿用既有 DEMO_KPI 手法——刻意避開真實營運數字量級、挑好看整數。
 // index 0 = 本月（部分月，天數尚未跑完所以比上月低是合理現象）。
+// Info-3 修復（tester 2026-07-12）：舊寫法用 .toISOString().slice(0,10) 把「本地日期」轉
+// 成 UTC 字串——台北是 UTC+8，只要瀏覽器本地時間落在 00:00~07:59，換算回 UTC 會退到「前一
+// 天」，剛好跨月時整個月份就退一格（例：本地 7/1 03:00 → UTC 6/30 19:00 → 誤判成 6 月）。
+// 這正是「demo 模式本月損益全 $0」的根因：DEMO_MONTHLY_PROFITABILITY[0] 算出來變成「上個月」
+// 而非「本月」，跟 /insights 用本地年月比對的 thisMonthStr 對不上，find() 找不到列就落到全 0。
+// 改用本地年/月/日組字串，不經過 UTC 轉換，跟 insights/page.tsx 的 pad2()/toDateStr() 用同一
+// 種算法（本地 getFullYear/getMonth），才不會兩邊各用一套時區邏輯互相對不上。
 function demoMonthStart(monthsAgo: number): string {
   const d = new Date();
   d.setDate(1);
   d.setMonth(d.getMonth() - monthsAgo);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 export const DEMO_MONTHLY_PROFITABILITY: MonthlyProfitability[] = [
