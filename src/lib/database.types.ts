@@ -302,3 +302,23 @@ export interface OperatingExpense {
   notes: string | null
   created_at: string
 }
+
+// ============================================================
+// Views（唯讀，非表；本檔其餘型別對應真實表，這裡是唯一例外——
+// v_dashboard_kpi／v_monthly_revenue／v_products_with_stock 等既有 view
+// 沒有共用型別、各頁面查詢時各自 inline，這支 view 因為 M4 同時被
+// /today 與 /insights 兩處引用才值得共用一個型別，減少兩邊定義漂移）
+// ============================================================
+
+// supabase/migrations/010_monthly_profitability_view.sql（011 訂正作廢訂單口徑）
+export interface MonthlyProfitability {
+  month: string // date_trunc('month', ...)::date，Postgrest 回傳 "YYYY-MM-01"
+  order_count: number
+  total_revenue: number
+  total_net_revenue: number
+  total_cogs: number
+  gross_profit: number
+  total_ad_cost: number
+  total_expenses: number
+  net_profit: number
+}

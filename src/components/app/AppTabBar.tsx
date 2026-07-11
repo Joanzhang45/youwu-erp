@@ -8,15 +8,21 @@ const tabs = [
   { href: "/today", label: "今天", Icon: TodayIcon, match: "/today" },
   { href: "/receive", label: "點收", Icon: ReceiveIcon, match: "/receive" },
   { href: "/stock", label: "庫存", Icon: StockIcon, match: "/stock" },
-  { href: "/", label: "更多", Icon: MoreIcon, match: "__more__" },
+  { href: "/more", label: "更多", Icon: MoreIcon, match: "/more" },
 ] as const;
+
+// 「更多」頁是過渡選單頁，「分析」暫時掛在它底下（PRD §3 完整 7 節點側欄留待 M5），
+// 所以走 /insights 時底部導覽也要點亮「更多」，不然會看起來像離開了 app。
+const MORE_UMBRELLA = ["/more", "/insights"];
 
 export function AppTabBar() {
   const pathname = usePathname();
   const cleanPath = pathname.replace(/^\/youwu-erp/, "") || "/";
 
-  const isActive = (match: string) =>
-    match === "__more__" ? false : cleanPath === match || cleanPath.startsWith(match + "?");
+  const isActive = (match: string) => {
+    if (match === "/more") return MORE_UMBRELLA.some((p) => cleanPath === p || cleanPath.startsWith(p + "?"));
+    return cleanPath === match || cleanPath.startsWith(match + "?");
+  };
 
   return (
     <>

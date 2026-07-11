@@ -21,7 +21,14 @@ type TodayData = {
   arrived: ArrivedTask[];
   inTransitCount: number;
   lastStocktakeDays: number | null;
-  kpi: { monthRevenue: number; monthOrders: number; outOfStock: number; lowStock: number };
+  kpi: {
+    monthRevenue: number;
+    monthOrders: number;
+    monthGrossProfit: number;
+    monthNetProfit: number;
+    outOfStock: number;
+    lowStock: number;
+  };
   recent: ActivityRow[];
 };
 
@@ -80,7 +87,13 @@ export default function TodayPage() {
           .in("status", ["準備中", "已出發", "運送中", "已到達"])
           .order("expected_arrival", { ascending: true }),
         supabase.from("v_dashboard_kpi").select("out_of_stock_count, low_stock_count").maybeSingle(),
-        supabase.from("v_monthly_revenue").select("month, order_count, net_revenue").order("month", { ascending: false }).limit(3),
+        // M4：改讀 v_monthly_profitability（010/011），一次拿到營收＋毛利＋淨利，
+        // 取代舊的 v_monthly_revenue（只有營收沒有毛利，M2 已知缺口，見 PRD §7.1）
+        supabase
+          .from("v_monthly_profitability")
+          .select("month, order_count, total_net_revenue, gross_profit, net_profit")
+          .order("month", { ascending: false })
+          .limit(3),
         supabase.from("stock_snapshots").select("snapshot_date").order("snapshot_date", { ascending: false }).limit(1),
         supabase.from("inventory_ledger").select("id, product_id, movement_type, qty_delta, note, occurred_at").order("occurred_at", { ascending: false }).limit(5),
       ]);
@@ -101,7 +114,9 @@ export default function TodayPage() {
         }));
       }
 
-      const thisMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+      // v_monthly_profitability.month 是 date_trunc('month', ...)::date，Postgrest 回傳
+      // "YYYY-MM-01"（不是 v_monthly_revenue 舊格式的 "YYYY-MM"），比對格式要跟著換。
+      const thisMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
       // 只認當月那一列，本月無訂單就誠實顯示 0，不要偷用上個月數字冒充「本月」
       const monthRow = (monthRes.data || []).find((r) => r.month === thisMonth);
 
@@ -131,8 +146,13 @@ export default function TodayPage() {
         inTransitCount,
         lastStocktakeDays,
         kpi: {
-          monthRevenue: Number(monthRow?.net_revenue) || 0,
+          // v_monthly_profitability 的毛利/淨利欄位是 numeric 除法算出來的浮點數，
+          // 四捨五入到整數元再存，不然 .toLocaleString() 會噴出「$2,637.71」這種雜訊
+          // （2026-07-12 自測用真實登入態截圖抓到，同一顆 bug 也修在 /insights）
+          monthRevenue: Math.round(Number(monthRow?.total_net_revenue) || 0),
           monthOrders: Number(monthRow?.order_count) || 0,
+          monthGrossProfit: Math.round(Number(monthRow?.gross_profit) || 0),
+          monthNetProfit: Math.round(Number(monthRow?.net_profit) || 0),
           outOfStock: kpiRes.data?.out_of_stock_count || 0,
           lowStock: kpiRes.data?.low_stock_count || 0,
         },
@@ -143,7 +163,7 @@ export default function TodayPage() {
         arrived: [],
         inTransitCount: 0,
         lastStocktakeDays: null,
-        kpi: { monthRevenue: 0, monthOrders: 0, outOfStock: 0, lowStock: 0 },
+        kpi: { monthRevenue: 0, monthOrders: 0, monthGrossProfit: 0, monthNetProfit: 0, outOfStock: 0, lowStock: 0 },
         recent: [],
       });
     } finally {
@@ -246,22 +266,38 @@ export default function TodayPage() {
               </div>
             )}
 
-            {/* KPI 摘要卡 */}
+            {/* KPI 摘要卡（M4：補本月毛利／淨利，關閉 M2 已知缺口，見 PRD §7.1） */}
             {data && (
               <Link
-                href="/analytics"
+                href="/insights"
                 className="block rounded-2xl border border-[#EAEAEA] p-4 hover:border-[#171717] transition-colors duration-150 bg-white mt-5"
               >
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-medium text-[#8F8F8F]">本月摘要</p>
                   <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F]" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                   <div>
                     <p className="text-2xl font-semibold text-[#171717] tabular-nums">
                       ${data.kpi.monthRevenue.toLocaleString()}
                     </p>
                     <p className="text-[11px] text-[#8F8F8F] mt-0.5">本月營收（{data.kpi.monthOrders} 筆訂單）</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-semibold text-[#171717] tabular-nums">
+                      ${data.kpi.monthGrossProfit.toLocaleString()}
+                    </p>
+                    <p className="text-[11px] text-[#8F8F8F] mt-0.5">本月毛利</p>
+                  </div>
+                  <div>
+                    <p
+                      className={`text-2xl font-semibold tabular-nums ${
+                        data.kpi.monthNetProfit < 0 ? "text-[#E00]" : "text-[#171717]"
+                      }`}
+                    >
+                      ${data.kpi.monthNetProfit.toLocaleString()}
+                    </p>
+                    <p className="text-[11px] text-[#8F8F8F] mt-0.5">本月淨利</p>
                   </div>
                   <div>
                     <p

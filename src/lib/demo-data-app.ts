@@ -1,6 +1,7 @@
 // M2 新任務導向流程（/today /receive /stock）展示模式資料。
+// M4 追加 /more /insights 用的月度損益展示資料。
 // 新檔、不改動 demo-data.ts；商品資料直接重用既有 DEMO_PRODUCTS，避免重複維護兩份假資料。
-import type { ConsolidatedShipment, ConsolidatedShipmentItem } from "./database.types";
+import type { ConsolidatedShipment, ConsolidatedShipmentItem, MonthlyProfitability } from "./database.types";
 import { DEMO_PRODUCTS } from "./demo-data";
 
 export type DemoShipmentItem = ConsolidatedShipmentItem & {
@@ -99,9 +100,31 @@ export const DEMO_RECENT_ACTIVITY = [
 
 export const DEMO_LAST_STOCKTAKE_DAYS = 23;
 
+// 近 6 個月月度損益展示資料（M4，對應 v_monthly_profitability）。
+// month 用真實「現在」往回推算，作品集展示才不會日期一眼看出是舊資料；
+// 金額本身仍沿用既有 DEMO_KPI 手法——刻意避開真實營運數字量級、挑好看整數。
+// index 0 = 本月（部分月，天數尚未跑完所以比上月低是合理現象）。
+function demoMonthStart(monthsAgo: number): string {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - monthsAgo);
+  return d.toISOString().slice(0, 10);
+}
+
+export const DEMO_MONTHLY_PROFITABILITY: MonthlyProfitability[] = [
+  { month: demoMonthStart(0), order_count: 61, total_revenue: 46000, total_net_revenue: 42800, total_cogs: 19200, gross_profit: 23600, total_ad_cost: 5900, total_expenses: 2900, net_profit: 14800 },
+  { month: demoMonthStart(1), order_count: 78, total_revenue: 44300, total_net_revenue: 41200, total_cogs: 18500, gross_profit: 22700, total_ad_cost: 3600, total_expenses: 2300, net_profit: 16800 },
+  { month: demoMonthStart(2), order_count: 71, total_revenue: 40600, total_net_revenue: 37800, total_cogs: 17000, gross_profit: 20800, total_ad_cost: 3400, total_expenses: 2200, net_profit: 15200 },
+  { month: demoMonthStart(3), order_count: 63, total_revenue: 35700, total_net_revenue: 33200, total_cogs: 15000, gross_profit: 18200, total_ad_cost: 3100, total_expenses: 2000, net_profit: 13100 },
+  { month: demoMonthStart(4), order_count: 55, total_revenue: 31700, total_net_revenue: 29500, total_cogs: 13300, gross_profit: 16200, total_ad_cost: 2800, total_expenses: 1900, net_profit: 11500 },
+  { month: demoMonthStart(5), order_count: 48, total_revenue: 27900, total_net_revenue: 26000, total_cogs: 11700, gross_profit: 14300, total_ad_cost: 2600, total_expenses: 1800, net_profit: 9900 },
+];
+
 export const DEMO_KPI = {
-  monthRevenue: 42800,
-  monthOrders: 61,
+  monthRevenue: DEMO_MONTHLY_PROFITABILITY[0].total_net_revenue,
+  monthOrders: DEMO_MONTHLY_PROFITABILITY[0].order_count,
+  monthGrossProfit: DEMO_MONTHLY_PROFITABILITY[0].gross_profit,
+  monthNetProfit: DEMO_MONTHLY_PROFITABILITY[0].net_profit,
   outOfStock: 2,
   lowStock: 5,
 };
