@@ -174,10 +174,13 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
     }
   }, [isDemo, shipmentId, toast]);
 
+  // 依賴 fetchData（其本身依賴 isDemo）而非只依賴 shipmentId：AuthProvider 掛載瞬間
+  // session 尚未解出、isDemo 暫時為 true，若只依 shipmentId 這裡只會跑一次、抓到那個暫時值，
+  // 直連/整頁刷新 /receive?shipment_id=X 會被誤判成 demo 分支找不到真實集運單而顯示「找不到」。
+  // 同一支 fetchData 對照 today/page.tsx、receive/page.tsx 既有安全寫法。
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shipmentId]);
+  }, [fetchData]);
 
   const current = items[currentIndex];
 
@@ -264,7 +267,11 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
         variant_name: item.variant_name,
         expected_qty: item.expected_qty,
         actual_qty: item.actual_qty,
-        discrepancy: item.actual_qty - item.expected_qty,
+        // discrepancy 不可寫：receiving_record_items.discrepancy 是
+        // GENERATED ALWAYS AS (actual_qty - expected_qty) STORED（見
+        // supabase/migrations/001_initial_schema.sql 第 255 行），帶這欄一律 400
+        // code 428C9。tester production 驗收抓到；舊版 purchase/receiving/page.tsx
+        // 同樣帶了這欄（該檔不在本次改動範圍，可能同樣受影響，留給 developer 另外評估）。
         condition: item.condition,
         notes: item.notes || null,
       }));
@@ -374,7 +381,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
           <p className="text-sm text-[#8F8F8F]">{shipment.shipment_number}</p>
           <h1 className="text-xl font-semibold text-[#171717] tracking-tight mt-0.5">點收總覽</h1>
         </header>
-        <main className="px-5 max-w-2xl mx-auto pb-8">
+        <main className="px-5 max-w-2xl mx-auto pb-28">
           <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden mb-5">
             {items.map((item) => {
               const diff = item.actual_qty - item.expected_qty;
@@ -422,7 +429,11 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
   const isCorrect = current.actual_qty === current.expected_qty;
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    // Blocker 1 修復（tester production 驗收）：手機底部 AppTabBar 是 position:fixed，
+    // 這裡原本是 min-h-screen + flex-1 把「下一項」按鈕精確頂到 100vh 邊界，剛好落在
+    // fixed 導覽列底下（同畫面座標，導覽列 DOM 在後、paint 在上，觸控永遠先命中導覽列）。
+    // 加 pb-28 讓 flex-1 中間區塊少長一截，CTA 的實際落點退到導覽列上方，兩者不再重疊。
+    <div className="min-h-screen bg-white flex flex-col pb-28">
       {/* 進度條 */}
       <div className="px-5 pt-5 max-w-2xl mx-auto w-full">
         <div className="flex items-center justify-between mb-2">
