@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { getSupabase, isDemo } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/AuthContext";
 import type { Product } from "@/lib/database.types";
 import { DEMO_PRODUCTS } from "@/lib/demo-data";
 import { StockModal } from "@/components/StockModal";
@@ -24,6 +25,7 @@ function isNotDiscontinued(p: Product): boolean {
 }
 
 export default function InventoryPage() {
+  const { isDemo } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export default function InventoryPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isDemo]);
 
   useEffect(() => {
     fetchProducts();

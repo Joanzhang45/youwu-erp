@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { getSupabase, isDemo } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/AuthContext";
 import { DEMO_DASHBOARD_STATS } from "@/lib/demo-data";
 
 const modules = [
@@ -28,6 +29,7 @@ type QuickStats = {
 };
 
 export default function Home() {
+  const { isDemo } = useAuth();
   const [stats, setStats] = useState<QuickStats | null>(null);
 
   const fetchStats = useCallback(async () => {
@@ -84,7 +86,7 @@ export default function Home() {
     } catch {
       // silently fail — stats are optional
     }
-  }, []);
+  }, [isDemo]);
 
   useEffect(() => {
     fetchStats();

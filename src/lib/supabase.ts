@@ -1,8 +1,8 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient, Session } from '@supabase/supabase-js'
 
-// 公開站（GitHub Pages）build env 固定寫 'true'；本機 .env.local 寫 'false' 看真實資料。
-// 不用「有沒有設 URL」判斷，因為 GitHub Actions secret 一直有設 URL，會導致公開站誤判成非 demo。
-export const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === 'true'
+// Runtime 模式：未登入 = demo（AuthContext 依 session 有無判斷），不再用 build-time 旗標鎖死。
+// RLS 已把 anon 收斂到 0 policy（預設拒），真實資料只有 authenticated（且 uid 綁 Joan 本人）才讀得到，
+// 所以即使公開站前端一律載入同一支 bundle，未登入訪客本來就打不到任何真實資料。
 
 let _client: SupabaseClient | null = null
 
@@ -18,4 +18,28 @@ export function getSupabase(): SupabaseClient {
 
   _client = createClient(url, key)
   return _client
+}
+
+export async function signIn(email: string, password: string) {
+  return getSupabase().auth.signInWithPassword({ email, password })
+}
+
+export async function signOutUser() {
+  return getSupabase().auth.signOut()
+}
+
+export async function getInitialSession(): Promise<Session | null> {
+  const { data } = await getSupabase().auth.getSession()
+  return data.session
+}
+
+export function onAuthStateChange(
+  callback: (session: Session | null) => void
+) {
+  const {
+    data: { subscription },
+  } = getSupabase().auth.onAuthStateChange((_event, session) => {
+    callback(session)
+  })
+  return subscription
 }
