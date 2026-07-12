@@ -179,7 +179,11 @@ export default function TodayPage() {
   const weekday = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"][today.getDay()];
   const dateLabel = `${today.getMonth() + 1}月${today.getDate()}日 ${weekday}`;
 
-  const hasTasks = !loading && data && (data.arrived.length > 0 || data.inTransitCount > 0);
+  // 盤點提醒：從沒盤過（lastStocktakeDays === null）或已過 14 天以上都算「待辦」，
+  // 併入 hasTasks 判斷——不然「今天沒有待辦 👍」空狀態文案會跟緊接在它下面的盤點提醒卡互相矛盾
+  // （M4 sub-batch 3b 修正；原本只看 arrived/inTransitCount 兩項，盤點卡自己不影響空狀態判斷）。
+  const showStocktakeReminder = !loading && !!data && (data.lastStocktakeDays == null || data.lastStocktakeDays >= 14);
+  const hasTasks = !loading && data && (data.arrived.length > 0 || data.inTransitCount > 0 || showStocktakeReminder);
 
   return (
     <div className="min-h-screen bg-white">
@@ -242,21 +246,29 @@ export default function TodayPage() {
               </Link>
             )}
 
-            {/* 盤點提醒（唯讀資訊卡，盤點操作流程排 M2 之後） */}
-            {data?.lastStocktakeDays != null && data.lastStocktakeDays >= 14 && (
-              <div className="rounded-2xl border border-[#EAEAEA] p-4 bg-[#FAFAFA]">
+            {/* 盤點提醒（M4 sub-batch 3b：盤點模式已上線，改成可點的任務卡）
+                從沒盤過（lastStocktakeDays === null，stock_snapshots 空表）引導首次盤點；
+                已過 14 天以上則提醒該盤了。兩種文案共用同一個入口 /stock?stocktake=1。 */}
+            {showStocktakeReminder && (
+              <Link
+                href="/stock?stocktake=1"
+                className="block rounded-2xl border border-[#EAEAEA] p-4 hover:border-[#171717] transition-colors duration-150 bg-[#FAFAFA]"
+              >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[#F5A623]/10 flex items-center justify-center flex-shrink-0">
                     <span className="text-lg">🕐</span>
                   </div>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#171717]">
-                      上次盤點已過 {data.lastStocktakeDays} 天
+                      {data?.lastStocktakeDays == null ? "還沒盤點過" : `上次盤點已過 ${data.lastStocktakeDays} 天`}
                     </p>
-                    <p className="text-xs text-[#8F8F8F] mt-0.5">盤點模式尚未上線，先於庫存頁手動核對</p>
+                    <p className="text-xs text-[#8F8F8F] mt-0.5">
+                      {data?.lastStocktakeDays == null ? "點我開始第一次盤點" : "點我開始盤點"}
+                    </p>
                   </div>
+                  <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F] flex-shrink-0" />
                 </div>
-              </div>
+              </Link>
             )}
 
             {/* 空狀態 */}

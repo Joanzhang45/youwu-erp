@@ -1,13 +1,24 @@
 "use client";
 
-// 庫存調整（PRD §4.3）。搜尋優先，不預設 render 全量商品長牆；盤點模式排 M2 之後獨立增量。
-import { useCallback, useEffect, useMemo, useState } from "react";
+// 庫存調整（PRD §4.3）。搜尋優先，不預設 render 全量商品長牆。
+// M4 第三批 sub-batch 3b：加盤點模式（依分類分批走 StocktakeFlow）＋盤點紀錄回查。
+// static export 無動態路由，沿用既有 query-param 慣例（同 /inbound /catalog /sales）：
+//   /stock                      → StockHome（原本的搜尋＋調整）
+//   /stock?stocktake=1          → CategorySelectionList（選一個分類開始盤點）
+//   /stock?stocktake=1&category=X → StocktakeFlow（逐項盤點）
+//   /stock?records=1            → StocktakeRecords（盤點紀錄回查）
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
 import { DEMO_PRODUCTS } from "@/lib/demo-data";
 import { StockAdjustSheet } from "@/components/app/StockAdjustSheet";
+import { StocktakeFlow } from "@/components/app/StocktakeFlow";
+import { StocktakeRecords } from "@/components/app/StocktakeRecords";
+import { ChevronRightIcon } from "@/components/app/icons";
 
 type StockAction = { product: Product; type: "in" | "out" } | null;
 
@@ -16,6 +27,126 @@ function isNotDiscontinued(p: Product): boolean {
 }
 
 export default function StockPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
+      <StockContent />
+    </Suspense>
+  );
+}
+
+function StockContent() {
+  const searchParams = useSearchParams();
+  const stocktake = searchParams.get("stocktake");
+  const category = searchParams.get("category");
+  const records = searchParams.get("records");
+
+  if (records) return <StocktakeRecords />;
+  if (stocktake && category) return <StocktakeFlow category={category} />;
+  if (stocktake) return <CategorySelectionList />;
+  return <StockHome />;
+}
+
+type CategoryCount = { category: string; count: number };
+
+function CategorySelectionList() {
+  const { isDemo } = useAuth();
+  const [categories, setCategories] = useState<CategoryCount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [resumeCategory, setResumeCategory] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        if (isDemo) {
+          const map = new Map<string, number>();
+          DEMO_PRODUCTS.filter(isNotDiscontinued).forEach((p) => {
+            const cat = p.category || "（未分類）";
+            map.set(cat, (map.get(cat) || 0) + 1);
+          });
+          setCategories(Array.from(map, ([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count));
+          return;
+        }
+        const { data, error } = await getSupabase().from("products").select("category, product_status");
+        if (error) throw error;
+        const map = new Map<string, number>();
+        (data || [])
+          .filter((p) => p.product_status !== "停售")
+          .forEach((p) => {
+            const cat = p.category || "（未分類）";
+            map.set(cat, (map.get(cat) || 0) + 1);
+          });
+        setCategories(Array.from(map, ([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count));
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    // 中斷保護：檢查有沒有留在 localStorage 的進行中盤點草稿，掃到就給續點捷徑
+    // （直接開 URL 也能續點，這裡只是讓使用者不用記自己盤到哪個分類）。
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("youwu_stocktake_draft_")) {
+          setResumeCategory(key.replace("youwu_stocktake_draft_", ""));
+          break;
+        }
+      }
+    } catch {
+      // localStorage 不可用忽略
+    }
+  }, [isDemo]);
+
+  return (
+    <div className="min-h-screen bg-white">
+      {isDemo && (
+        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">展示模式 — 資料為模擬</div>
+      )}
+
+      <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
+        <Link href="/stock" className="inline-flex items-center gap-1 text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150 mb-2">
+          ‹ 返回庫存
+        </Link>
+        <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">開始盤點</h1>
+        <p className="text-sm text-[#8F8F8F] mt-0.5">選一個分類，逐項核對帳上數量</p>
+      </header>
+
+      <main className="px-5 max-w-2xl mx-auto pb-10">
+        {resumeCategory && (
+          <Link
+            href={`/stock?stocktake=1&category=${encodeURIComponent(resumeCategory)}`}
+            className="block rounded-2xl border border-[#F5A623]/40 bg-[#F5A623]/5 p-4 mb-4 hover:border-[#F5A623] transition-colors duration-150"
+          >
+            <p className="text-sm font-medium text-[#171717]">有進行中的盤點：{resumeCategory}</p>
+            <p className="text-xs text-[#8F8F8F] mt-0.5">點此繼續上次的盤點進度</p>
+          </Link>
+        )}
+
+        {loading ? (
+          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+        ) : (
+          <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden app-fade-up-enter">
+            {categories.map((c) => (
+              <Link
+                key={c.category}
+                href={`/stock?stocktake=1&category=${encodeURIComponent(c.category)}`}
+                className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-[#FAFAFA] transition-colors duration-150"
+              >
+                <p className="text-sm font-medium text-[#171717]">{c.category}</p>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-xs text-[#8F8F8F] tabular-nums">{c.count} 項</span>
+                  <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F]" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function StockHome() {
   const { isDemo } = useAuth();
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -129,7 +260,7 @@ export default function StockPage() {
 
       <main className="px-5 max-w-2xl mx-auto pb-8">
         {/* 搜尋優先 */}
-        <div className="mb-4">
+        <div className="mb-3">
           <input
             type="text"
             value={search}
@@ -137,6 +268,22 @@ export default function StockPage() {
             placeholder="搜尋商品名稱、SKU、款式..."
             className="w-full px-4 py-3 bg-[#FAFAFA] border border-[#EAEAEA] rounded-xl text-base outline-none focus:border-[#171717] focus:bg-white transition-colors duration-150"
           />
+        </div>
+
+        {/* 盤點入口：工具列樣式，不干擾上面搜尋優先動線（PRD §4.3 明點「不干擾日常調整動線」） */}
+        <div className="flex items-center gap-2 mb-5">
+          <Link
+            href="/stock?stocktake=1"
+            className="flex-1 min-h-11 flex items-center justify-center gap-1.5 rounded-xl border border-[#EAEAEA] text-sm font-medium text-[#171717] hover:border-[#171717] transition-colors duration-150"
+          >
+            開始盤點
+          </Link>
+          <Link
+            href="/stock?records=1"
+            className="min-h-11 px-3 flex items-center justify-center rounded-xl text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150"
+          >
+            盤點紀錄
+          </Link>
         </div>
 
         {loading ? (
