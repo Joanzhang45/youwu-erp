@@ -142,7 +142,10 @@ function InboundHome() {
         <p className="text-sm text-[#8F8F8F] mt-0.5">選品 → 採購 → 集運 → 到貨 → 點收，一條鏈看完</p>
       </header>
 
-      <main className="px-5 max-w-2xl mx-auto pb-10">
+      {/* pb-24（非 pb-10）：底部固定 AppTabBar 淨空加大，比照 PurchaseOrderTimeline 同批修復
+          （tester A10 R1 Blocker），讓「選品候選」區塊的「載入更多」按鈕與歷史列表最後一列
+          在捲到底時也有足夠的觸控淨空，不被導覽列遮蔽。 */}
+      <main className="px-5 max-w-2xl mx-auto pb-24">
         {loading ? (
           <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
         ) : active.length === 0 ? (

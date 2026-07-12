@@ -217,7 +217,7 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
 
   return (
     <div className="min-h-screen bg-white app-fade-up-enter">
-      <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
+      <header className="px-5 pt-5 pb-3 max-w-2xl mx-auto">
         <Link href="/inbound" className="text-xs text-[#0070F3] hover:underline">
           ← 進貨
         </Link>
@@ -227,7 +227,8 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
         </p>
       </header>
 
-      <main className="px-5 max-w-2xl mx-auto pb-10 space-y-4">
+      {/* pb-24：同批修復 A10 R1 Blocker，末尾「在舊版選品詳情編輯」連結與底部導覽列間淨空加大 */}
+      <main className="px-5 max-w-2xl mx-auto pb-24 space-y-4">
         <section className="rounded-2xl border border-[#EAEAEA] p-4">
           {selection.product_image && (
             <img src={selection.product_image} alt="" className="w-full h-40 object-cover rounded-xl bg-[#FAFAFA] mb-3" />

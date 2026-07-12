@@ -233,7 +233,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
 
   return (
     <div className="min-h-screen bg-white app-fade-up-enter">
-      <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
+      <header className="px-5 pt-5 pb-3 max-w-2xl mx-auto">
         <Link href="/inbound" className="text-xs text-[#0070F3] hover:underline">
           ← 進貨
         </Link>
@@ -243,7 +243,14 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
         </p>
       </header>
 
-      <main className="px-5 max-w-2xl mx-auto pb-10">
+      {/* Blocker 修復（tester A10 R1）：底部固定 AppTabBar 高度約 64px，短內容的採購單
+          （節點內容少、無需捲動）在 scrollY=0 時，最後一個節點「點收入庫」的 CTA 剛好落在
+          導覽列的固定覆蓋區內——導覽列 DOM 在後、z-index 較高，實際觸控命中的是導覽列而非
+          CTA。trailing padding（main 底部留白）救不了這個情況，因為使用者一開始就沒捲動，
+          CTA 的畫面座標完全由「它上面所有節點的高度總和」決定；要讓它在靜止狀態就避開導覽列
+          覆蓋區，得縮小節點間距把它往上推，而不是在它下面加更多留白（那只在使用者主動往下捲
+          時才有用）。同一批收斂 header 上下 padding，三個 /inbound 子頁視覺一致。 */}
+      <main className="px-5 max-w-2xl mx-auto pb-24">
         <ol className="space-y-0">
           {/* 節點 1：下單 */}
           <TimelineStep index={0} stageIndex={stageIndex} last={false}>
@@ -444,9 +451,9 @@ function TimelineStep({
               : "bg-white border-[#EAEAEA]"
           }`}
         />
-        {!last && <div className={`w-px flex-1 min-h-[2.5rem] mt-1 ${done ? "bg-[#171717]" : "bg-[#EAEAEA]"}`} />}
+        {!last && <div className={`w-px flex-1 min-h-[1.75rem] mt-1 ${done ? "bg-[#171717]" : "bg-[#EAEAEA]"}`} />}
       </div>
-      <div className="flex-1 min-w-0 pb-7">{children}</div>
+      <div className="flex-1 min-w-0 pb-4">{children}</div>
     </li>
   );
 }
