@@ -60,6 +60,14 @@ function CatalogHome() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  // M5：舊 /products/mapping 退場 redirect 到 /catalog#mapping-tool，帶 hash 進站時
+  // 自動展開工具區，不然使用者會落在一個看起來空的頁面找不到蝦皮對應在哪。
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#mapping-tool") {
+      setToolsOpen(true);
+    }
+  }, []);
+
   const loadPage = useCallback(
     async (reset: boolean) => {
       reset ? setLoading(true) : setLoadingMore(true);
@@ -193,7 +201,7 @@ function CatalogHome() {
         )}
 
         {/* 工具區：蝦皮對應（原 /products/mapping 降級併入，PRD §2.3 #03） */}
-        <div className="mt-8">
+        <div id="mapping-tool" className="mt-8">
           <button
             onClick={() => setToolsOpen((v) => !v)}
             className="w-full flex items-center justify-between py-2.5 text-sm text-[#8F8F8F]"

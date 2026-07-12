@@ -1,9 +1,9 @@
 "use client";
 
-// 「更多」過渡選單頁（任務①）。目的：把新舊兩代頁面接成「同一個 app 還沒翻新完的房間」，
-// 不是把使用者丟回舊首頁（8 卡片＋5 tab 那套，S1 兩套導覽並存的病灶）。
-// M4 第三批：商品／訂單／費用改指新版 /catalog /sales /spend（拿掉「改版中」徽章），
-// 舊三頁比照第二批「（舊版）」慣例保留在次要位置，M5 才退場。
+// 「更多」頁（M5 定版）。舊 13 頁已全數退場為 redirect stub，這裡不再是「新舊接房間」的
+// 過渡選單，而是手機「更多」tab 的正式目的地：分析／商品／訂單／費用——4 個桌機有獨立
+// 頂部節點、但手機 4 個 bottom tab 放不下的頁面，收在這裡＋登出。
+// 「進貨」「庫存」「今天」在手機已有自己的 bottom tab，不再重複列在這裡。
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { signOutUser } from "@/lib/supabase";
@@ -12,8 +12,6 @@ import {
   BoxIcon,
   ClipboardIcon,
   WalletIcon,
-  TruckIcon,
-  TimelineIcon,
   LogoutIcon,
   ChevronRightIcon,
 } from "@/components/app/icons";
@@ -24,40 +22,14 @@ type Entry = {
   label: string;
   desc: string;
   Icon: ComponentType<{ className?: string }>;
-  legacy: boolean;
 };
 
 const primary: Entry[] = [
-  { href: "/insights", label: "分析", desc: "本月損益、商品排行", Icon: InsightsIcon, legacy: false },
-  { href: "/catalog", label: "商品", desc: "商品主檔、蝦皮對應", Icon: BoxIcon, legacy: false },
-  { href: "/sales", label: "訂單", desc: "銷售訂單、CSV 匯入", Icon: ClipboardIcon, legacy: false },
-  { href: "/spend", label: "費用", desc: "廣告、營業費用", Icon: WalletIcon, legacy: false },
+  { href: "/insights", label: "分析", desc: "本月損益、商品排行", Icon: InsightsIcon },
+  { href: "/catalog", label: "商品", desc: "商品主檔、蝦皮對應", Icon: BoxIcon },
+  { href: "/sales", label: "訂單", desc: "銷售訂單、CSV 匯入", Icon: ClipboardIcon },
+  { href: "/spend", label: "費用", desc: "廣告、營業費用", Icon: WalletIcon },
 ];
-
-// M4 第三批：舊三頁保留在次要位置（M5 才退場），比照 purchasing 區塊「（舊版）」慣例。
-const legacyStandalone: Entry[] = [
-  { href: "/products", label: "商品（舊版）", desc: "商品主檔、成本", Icon: BoxIcon, legacy: true },
-  { href: "/orders", label: "訂單（舊版）", desc: "銷售訂單、CSV 匯入", Icon: ClipboardIcon, legacy: true },
-  { href: "/expenses", label: "費用（舊版）", desc: "廣告、營業費用", Icon: WalletIcon, legacy: true },
-];
-
-// M4 第二批：/inbound 用「採購單」為主軸的時間軸取代下面四項舊頁的功能，排在最前面、
-// 非 legacy（不掛「改版中」徽章）；舊四項保留到 M5 才退場，避免半路切導覽讓人找不到入口。
-const purchasing: Entry[] = [
-  { href: "/inbound", label: "進貨（新版時間軸）", desc: "選品→採購→集運→到貨→點收，一條鏈看完", Icon: TimelineIcon, legacy: false },
-  { href: "/purchase", label: "採購（舊版）", desc: "採購單列表", Icon: TruckIcon, legacy: true },
-  { href: "/purchase/shipments", label: "集運（舊版）", desc: "集運費用統計", Icon: TruckIcon, legacy: true },
-  { href: "/logistics", label: "物流（舊版）", desc: "境內物流追蹤", Icon: TruckIcon, legacy: true },
-  { href: "/selections", label: "選品（舊版）", desc: "選品評估", Icon: TruckIcon, legacy: true },
-];
-
-function LegacyBadge() {
-  return (
-    <span className="text-[10px] text-[#8F8F8F] bg-[#FAFAFA] border border-[#EAEAEA] px-1.5 py-0.5 rounded-full flex-shrink-0">
-      改版中
-    </span>
-  );
-}
 
 function EntryRow({ entry }: { entry: Entry }) {
   return (
@@ -72,7 +44,6 @@ function EntryRow({ entry }: { entry: Entry }) {
         <p className="text-sm font-medium text-[#171717]">{entry.label}</p>
         <p className="text-xs text-[#8F8F8F] truncate">{entry.desc}</p>
       </div>
-      {entry.legacy && <LegacyBadge />}
       <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F] flex-shrink-0" />
     </Link>
   );
@@ -96,20 +67,6 @@ export default function MorePage() {
       <main className="px-5 max-w-2xl mx-auto pb-10">
         <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden mb-5">
           {primary.map((e) => (
-            <EntryRow key={e.href} entry={e} />
-          ))}
-        </div>
-
-        <p className="text-xs font-medium text-[#8F8F8F] mb-2 px-1">進貨相關</p>
-        <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden mb-5">
-          {purchasing.map((e) => (
-            <EntryRow key={e.href} entry={e} />
-          ))}
-        </div>
-
-        <p className="text-xs font-medium text-[#8F8F8F] mb-2 px-1">舊版頁面（M5 前保留）</p>
-        <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden mb-5">
-          {legacyStandalone.map((e) => (
             <EntryRow key={e.href} entry={e} />
           ))}
         </div>

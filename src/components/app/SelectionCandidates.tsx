@@ -2,14 +2,20 @@
 
 // 選品候選（PRD §5 任務④）——進貨鏈的起點，掛在 /inbound 首頁下半段。
 // 刻意保持精簡：狀態篩選＋分頁列表＋detail 用 query param，不照搬舊版 /selections 全部
-// CRUD 欄位（新增/編輯表單仍留在舊版 /selections、/selections/detail，M5 前不動）。
+// CRUD 欄位；款式新增／競品新增這類低頻能力隨舊頁一起退場（M5），核心欄位（狀態／備註）
+// 改在 SelectionCandidateDetail 內就地編輯，見下方「編輯」區塊。
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
+import { useToast } from "@/components/Toast";
 import type { CompetitorProduct, ProductSelection, ProductVariant } from "@/lib/database.types";
 import { DEMO_PRODUCT_SELECTIONS } from "@/lib/demo-data-app";
-import { ChevronRightIcon } from "./icons";
+import { ChevronRightIcon, CheckIcon } from "./icons";
+
+// 沿用舊 /selections/detail 的狀態選項（+ 該頁缺漏的「評估中」，見 STATUS_BADGE 實際會出現的
+// 8 種狀態），M5 死循環修復用：舊版編輯連結退場後，狀態／備註在這裡直接可改。
+const EDIT_STATUS_OPTIONS = ["評估中", "考慮中", "測品", "預購", "已下單", "已通過", "不進貨", "已放棄"];
 
 const STATUS_BADGE: Record<string, string> = {
   評估中: "bg-[#0070F3]/10 text-[#0070F3] border-[#0070F3]/30",
@@ -147,56 +153,86 @@ export function SelectionCandidatesSection() {
 
 export function SelectionCandidateDetail({ id }: { id: number }) {
   const { isDemo } = useAuth();
+  const { toast } = useToast();
   const [selection, setSelection] = useState<ProductSelection | null>(null);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [competitors, setCompetitors] = useState<CompetitorProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      setNotFound(false);
-      if (isDemo) {
-        const found = DEMO_PRODUCT_SELECTIONS.find((s) => s.id === id) || null;
-        if (!active) return;
-        if (!found) {
-          setNotFound(true);
-          setLoading(false);
-          return;
-        }
-        setSelection(found);
-        setVariants([]);
-        setCompetitors([]);
+  // M5 死循環修復：舊「在舊版選品詳情編輯 →」連結指向即將退場的 /selections/detail，
+  // redirect 後會轉一圈繞回 /inbound（死循環）。沿用舊頁核心欄位（狀態／備註）做輕量編輯，
+  // 不搬舊頁款式／競品 CRUD（那些走款式/競品專用區塊，不是本次死循環修復範圍）。
+  const [editStatus, setEditStatus] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const fetchDetail = useCallback(async () => {
+    setLoading(true);
+    setNotFound(false);
+    if (isDemo) {
+      const found = DEMO_PRODUCT_SELECTIONS.find((s) => s.id === id) || null;
+      if (!found) {
+        setNotFound(true);
         setLoading(false);
         return;
       }
-      try {
-        const supabase = getSupabase();
-        const [selRes, varRes, compRes] = await Promise.all([
-          supabase.from("product_selections").select("*").eq("id", id).single(),
-          supabase.from("product_variants").select("*").eq("selection_id", id).order("created_at"),
-          supabase.from("competitor_products").select("*").eq("selection_id", id),
-        ]);
-        if (!active) return;
-        if (selRes.error || !selRes.data) {
-          setNotFound(true);
-          return;
-        }
-        setSelection(selRes.data);
-        setVariants(varRes.data || []);
-        setCompetitors(compRes.data || []);
-      } catch {
-        if (active) setNotFound(true);
-      } finally {
-        if (active) setLoading(false);
+      setSelection(found);
+      setEditStatus(found.status || "");
+      setEditNotes(found.notes || "");
+      setVariants([]);
+      setCompetitors([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      const supabase = getSupabase();
+      const [selRes, varRes, compRes] = await Promise.all([
+        supabase.from("product_selections").select("*").eq("id", id).single(),
+        supabase.from("product_variants").select("*").eq("selection_id", id).order("created_at"),
+        supabase.from("competitor_products").select("*").eq("selection_id", id),
+      ]);
+      if (selRes.error || !selRes.data) {
+        setNotFound(true);
+        return;
       }
-    })();
-    return () => {
-      active = false;
-    };
+      setSelection(selRes.data);
+      setEditStatus(selRes.data.status || "");
+      setEditNotes(selRes.data.notes || "");
+      setVariants(varRes.data || []);
+      setCompetitors(compRes.data || []);
+    } catch {
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
   }, [id, isDemo]);
+
+  useEffect(() => {
+    fetchDetail();
+  }, [fetchDetail]);
+
+  const handleSaveEdit = async () => {
+    if (!selection) return;
+    if (isDemo) {
+      toast("展示模式，未實際寫入", "info");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await getSupabase()
+        .from("product_selections")
+        .update({ status: editStatus || null, notes: editNotes || null })
+        .eq("id", selection.id);
+      if (error) throw error;
+      toast("已儲存");
+      fetchDetail();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "儲存失敗", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>;
@@ -227,7 +263,7 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
         </p>
       </header>
 
-      {/* pb-24：同批修復 A10 R1 Blocker，末尾「在舊版選品詳情編輯」連結與底部導覽列間淨空加大 */}
+      {/* pb-24：同批修復 A10 R1 Blocker，末尾編輯區塊與底部導覽列間淨空加大 */}
       <main className="px-5 max-w-2xl mx-auto pb-24 space-y-4">
         <section className="rounded-2xl border border-[#EAEAEA] p-4">
           {selection.product_image && (
@@ -296,9 +332,49 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
           </section>
         )}
 
-        <Link href={`/selections/detail?id=${selection.id}`} className="block text-center text-sm text-[#0070F3] hover:underline py-2">
-          在舊版選品詳情編輯 →
-        </Link>
+        {/* 編輯（M5 死循環修復）：舊版連結指向即將退場的 /selections/detail，改成沿用
+            舊頁核心欄位（狀態／備註）就地編輯，不必再繞出這個頁面。款式／競品的新增與刪除
+            仍是舊頁專屬能力，低頻操作暫不搬（進貨重啟前才會用到，見 PRD §2.3 #12）。 */}
+        <section className="rounded-2xl border border-[#EAEAEA] p-4 space-y-3">
+          <p className="text-xs font-medium text-[#8F8F8F]">編輯</p>
+          <div>
+            <label className="block text-xs font-medium text-[#171717] mb-1">狀態</label>
+            <select
+              value={editStatus}
+              onChange={(e) => setEditStatus(e.target.value)}
+              className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150 bg-white"
+            >
+              <option value="">未設定</option>
+              {EDIT_STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#171717] mb-1">備註</label>
+            <input
+              type="text"
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150"
+              placeholder="選填"
+            />
+          </div>
+          <button
+            onClick={handleSaveEdit}
+            disabled={saving}
+            className="w-full py-3 rounded-xl text-white font-semibold text-sm bg-[#171717] active:scale-[0.98] transition-transform duration-150 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {saving ? "儲存中..." : (
+              <>
+                <CheckIcon className="w-4 h-4" />
+                儲存變更
+              </>
+            )}
+          </button>
+        </section>
       </main>
     </div>
   );

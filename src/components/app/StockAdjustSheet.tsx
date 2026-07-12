@@ -1,7 +1,7 @@
 "use client";
 
-// 複製自 src/components/StockModal.tsx 並改 Vercel/Geist 視覺＋原因下拉（取代自由備註），
-// 舊版 StockModal 不動、仍供舊 /inventory 頁使用。
+// 複製自舊版 src/components/StockModal.tsx 並改 Vercel/Geist 視覺＋原因下拉（取代自由備註）；
+// 舊版 StockModal.tsx 與其唯一使用者 /inventory 已隨 M5 導覽切換一併退場移除。
 import { useState } from "react";
 import type { Product } from "@/lib/database.types";
 import { CheckIcon } from "./icons";

@@ -14,7 +14,8 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (!loading && session) {
-    router.replace("/");
+    // M5：/ 已改成轉 /today 的 redirect stub，這裡直接指到 /today 省一次轉址跳轉。
+    router.replace("/today");
     return null;
   }
 
@@ -28,7 +29,7 @@ export default function LoginPage() {
       setError("登入失敗，請確認帳號密碼是否正確");
       return;
     }
-    router.push("/");
+    router.push("/today");
   };
 
   return (
