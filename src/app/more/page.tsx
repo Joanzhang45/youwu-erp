@@ -12,6 +12,7 @@ import {
   ClipboardIcon,
   WalletIcon,
   TruckIcon,
+  TimelineIcon,
   LogoutIcon,
   ChevronRightIcon,
 } from "@/components/app/icons";
@@ -32,11 +33,14 @@ const primary: Entry[] = [
   { href: "/expenses", label: "費用", desc: "廣告、營業費用", Icon: WalletIcon, legacy: true },
 ];
 
+// M4 第二批：/inbound 用「採購單」為主軸的時間軸取代下面四項舊頁的功能，排在最前面、
+// 非 legacy（不掛「改版中」徽章）；舊四項保留到 M5 才退場，避免半路切導覽讓人找不到入口。
 const purchasing: Entry[] = [
-  { href: "/purchase", label: "採購", desc: "採購單列表", Icon: TruckIcon, legacy: true },
-  { href: "/purchase/shipments", label: "集運", desc: "集運費用統計", Icon: TruckIcon, legacy: true },
-  { href: "/logistics", label: "物流", desc: "境內物流追蹤", Icon: TruckIcon, legacy: true },
-  { href: "/selections", label: "選品", desc: "選品評估", Icon: TruckIcon, legacy: true },
+  { href: "/inbound", label: "進貨（新版時間軸）", desc: "選品→採購→集運→到貨→點收，一條鏈看完", Icon: TimelineIcon, legacy: false },
+  { href: "/purchase", label: "採購（舊版）", desc: "採購單列表", Icon: TruckIcon, legacy: true },
+  { href: "/purchase/shipments", label: "集運（舊版）", desc: "集運費用統計", Icon: TruckIcon, legacy: true },
+  { href: "/logistics", label: "物流（舊版）", desc: "境內物流追蹤", Icon: TruckIcon, legacy: true },
+  { href: "/selections", label: "選品（舊版）", desc: "選品評估", Icon: TruckIcon, legacy: true },
 ];
 
 function LegacyBadge() {

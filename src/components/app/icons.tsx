@@ -132,6 +132,19 @@ export function TruckIcon({ className }: IconProps) {
   );
 }
 
+// M4 第二批追加（/inbound 進貨鏈時間軸專用，同一套 22px stroke 1.5 慣例）
+
+export function TimelineIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="5" cy="5.5" r="2" />
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="5" cy="18.5" r="2" />
+      <path d="M9 5.5h10M9 12h6M9 18.5h8" />
+    </svg>
+  );
+}
+
 export function LogoutIcon({ className }: IconProps) {
   return (
     <svg {...base} className={className}>
