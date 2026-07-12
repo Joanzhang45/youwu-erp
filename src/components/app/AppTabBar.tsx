@@ -21,8 +21,10 @@ const MOBILE_TABS = [
 
 // 「今天」傘下：/receive 是從「今天」任務卡或「進貨」時間軸點進去的點收流程，非獨立節點。
 const TODAY_UMBRELLA = ["/today", "/receive"];
-// 手機「更多」傘下：分析／商品／訂單／費用四個桌機才有獨立節點的頁面，手機收在「更多」裡。
-const MORE_UMBRELLA = ["/more", "/insights", "/catalog", "/sales", "/spend"];
+// 手機「更多」傘下：分析／商品／訂單／費用四個桌機才有獨立節點的頁面，手機收在「更多」裡；
+// /help（使用說明）也收在這裡——它不是桌機 7 節點之一，訪客進 /help 時底部「更多」點亮，
+// 心理模型上「使用說明」本來就該從「更多」找到，跟 /more 頁面裡實際放的入口位置一致。
+const MORE_UMBRELLA = ["/more", "/insights", "/catalog", "/sales", "/spend", "/help"];
 
 // 桌機頂部 7 節點（PRD §3：今天／進貨／庫存／商品／訂單／費用／分析）。
 // PRD 原文寫「側欄」，但現況慣例（M2 起）是頂部細 nav；7 個文字節點＋圖示橫向排＋右側帳號區

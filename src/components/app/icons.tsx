@@ -183,3 +183,14 @@ export function LinkIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+// /help 使用說明頁專用（問號泡泡，同一套 22px stroke 1.5 慣例）
+export function HelpIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.4 9.3a2.6 2.6 0 0 1 5 1c0 1.7-2.4 1.9-2.4 3.4" />
+      <circle cx="12" cy="16.8" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}

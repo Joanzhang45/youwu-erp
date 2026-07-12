@@ -14,6 +14,7 @@ import {
   WalletIcon,
   LogoutIcon,
   ChevronRightIcon,
+  HelpIcon,
 } from "@/components/app/icons";
 import type { ComponentType } from "react";
 
@@ -30,6 +31,10 @@ const primary: Entry[] = [
   { href: "/sales", label: "訂單", desc: "銷售訂單、CSV 匯入", Icon: ClipboardIcon },
   { href: "/spend", label: "費用", desc: "廣告、營業費用", Icon: WalletIcon },
 ];
+
+// 使用說明入口（放登出上方，獨立一組——它不是「四個桌機節點手機收合」的那一類，
+// 是給彣錩看的操作手冊，跟上面四個資料頁刻意分開一組視覺上更清楚）。
+const helpEntry: Entry = { href: "/help", label: "使用說明", desc: "操作步驟、常見問題", Icon: HelpIcon };
 
 function EntryRow({ entry }: { entry: Entry }) {
   return (
@@ -69,6 +74,10 @@ export default function MorePage() {
           {primary.map((e) => (
             <EntryRow key={e.href} entry={e} />
           ))}
+        </div>
+
+        <div className="rounded-2xl border border-[#EAEAEA] overflow-hidden mb-5">
+          <EntryRow entry={helpEntry} />
         </div>
 
         <div className="rounded-2xl border border-[#EAEAEA] overflow-hidden">

@@ -343,6 +343,13 @@ export default function TodayPage() {
                 </div>
               </div>
             )}
+
+            {/* 低調的使用說明入口——彣錩第一次看新版反映找不到按鈕，這頁是為他寫的白話說明書 */}
+            <p className="text-center pt-4">
+              <Link href="/help" className="text-xs text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150">
+                ❓ 不會用？看使用說明
+              </Link>
+            </p>
           </div>
         )}
       </main>
