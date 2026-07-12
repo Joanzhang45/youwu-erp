@@ -13,9 +13,10 @@ import { GeistSans } from "@/lib/fonts";
 // root layout），所以底部導覽在這裡依路徑分流，而不是動舊的 TabBar.tsx／舊頁面檔案。
 // 舊路徑那一支完全對照改版前的輸出，零視覺變動；新路徑那一支才套新版 AppTabBar + Geist 字體。
 // M4 第一批追加 /more（過渡選單頁）／/insights（新版分析頁）；
-// M4 第二批追加 /inbound（進貨鏈時間軸，取代 selections/purchase/shipments/logistics 五頁）。
+// M4 第二批追加 /inbound（進貨鏈時間軸，取代 selections/purchase/shipments/logistics 五頁）；
+// M4 第三批追加 /catalog /sales /spend（取代 products/orders/expenses 三頁）。
 // 全部是全新檔案，同樣不動舊 13 頁。
-const NEW_APP_ROUTES = ["/today", "/receive", "/stock", "/more", "/insights", "/inbound"];
+const NEW_APP_ROUTES = ["/today", "/receive", "/stock", "/more", "/insights", "/inbound", "/catalog", "/sales", "/spend"];
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

@@ -11,9 +11,10 @@ const tabs = [
   { href: "/more", label: "更多", Icon: MoreIcon, match: "/more" },
 ] as const;
 
-// 「更多」頁是過渡選單頁，「分析」「進貨」暫時掛在它底下（PRD §3 完整 7 節點側欄留待 M5），
-// 所以走 /insights、/inbound 時底部導覽也要點亮「更多」，不然會看起來像離開了 app。
-const MORE_UMBRELLA = ["/more", "/insights", "/inbound"];
+// 「更多」頁是過渡選單頁，「分析」「進貨」「商品」「訂單」「費用」暫時掛在它底下
+// （PRD §3 完整 7 節點側欄留待 M5），所以走這些新路由時底部導覽也要點亮「更多」，
+// 不然會看起來像離開了 app（M4 第三批追加 /catalog /sales /spend）。
+const MORE_UMBRELLA = ["/more", "/insights", "/inbound", "/catalog", "/sales", "/spend"];
 
 export function AppTabBar() {
   const pathname = usePathname();

@@ -154,3 +154,32 @@ export function LogoutIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+// M4 第三批追加（/catalog /sales /spend 專用，同一套 22px stroke 1.5 慣例）
+
+export function SearchIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M19 19l-4.3-4.3" />
+    </svg>
+  );
+}
+
+export function PlusIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M12 4.5v15M4.5 12h15" />
+    </svg>
+  );
+}
+
+export function LinkIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M9.5 14.5 14.5 9.5" />
+      <path d="M11 6.7l1.2-1.2a3.6 3.6 0 0 1 5 5.1L15.8 12" />
+      <path d="M13 17.3l-1.2 1.2a3.6 3.6 0 0 1-5-5.1L8.2 12" />
+    </svg>
+  );
+}

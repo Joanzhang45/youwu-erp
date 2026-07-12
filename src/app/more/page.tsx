@@ -2,7 +2,8 @@
 
 // 「更多」過渡選單頁（任務①）。目的：把新舊兩代頁面接成「同一個 app 還沒翻新完的房間」，
 // 不是把使用者丟回舊首頁（8 卡片＋5 tab 那套，S1 兩套導覽並存的病灶）。
-// 分析已經是新版（/insights），其餘五項暫連舊路由，右側標「改版中」小徽章降低違和感。
+// M4 第三批：商品／訂單／費用改指新版 /catalog /sales /spend（拿掉「改版中」徽章），
+// 舊三頁比照第二批「（舊版）」慣例保留在次要位置，M5 才退場。
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { signOutUser } from "@/lib/supabase";
@@ -28,9 +29,16 @@ type Entry = {
 
 const primary: Entry[] = [
   { href: "/insights", label: "分析", desc: "本月損益、商品排行", Icon: InsightsIcon, legacy: false },
-  { href: "/products", label: "商品", desc: "商品主檔、成本", Icon: BoxIcon, legacy: true },
-  { href: "/orders", label: "訂單", desc: "銷售訂單、CSV 匯入", Icon: ClipboardIcon, legacy: true },
-  { href: "/expenses", label: "費用", desc: "廣告、營業費用", Icon: WalletIcon, legacy: true },
+  { href: "/catalog", label: "商品", desc: "商品主檔、蝦皮對應", Icon: BoxIcon, legacy: false },
+  { href: "/sales", label: "訂單", desc: "銷售訂單、CSV 匯入", Icon: ClipboardIcon, legacy: false },
+  { href: "/spend", label: "費用", desc: "廣告、營業費用", Icon: WalletIcon, legacy: false },
+];
+
+// M4 第三批：舊三頁保留在次要位置（M5 才退場），比照 purchasing 區塊「（舊版）」慣例。
+const legacyStandalone: Entry[] = [
+  { href: "/products", label: "商品（舊版）", desc: "商品主檔、成本", Icon: BoxIcon, legacy: true },
+  { href: "/orders", label: "訂單（舊版）", desc: "銷售訂單、CSV 匯入", Icon: ClipboardIcon, legacy: true },
+  { href: "/expenses", label: "費用（舊版）", desc: "廣告、營業費用", Icon: WalletIcon, legacy: true },
 ];
 
 // M4 第二批：/inbound 用「採購單」為主軸的時間軸取代下面四項舊頁的功能，排在最前面、
@@ -95,6 +103,13 @@ export default function MorePage() {
         <p className="text-xs font-medium text-[#8F8F8F] mb-2 px-1">進貨相關</p>
         <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden mb-5">
           {purchasing.map((e) => (
+            <EntryRow key={e.href} entry={e} />
+          ))}
+        </div>
+
+        <p className="text-xs font-medium text-[#8F8F8F] mb-2 px-1">舊版頁面（M5 前保留）</p>
+        <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden mb-5">
+          {legacyStandalone.map((e) => (
             <EntryRow key={e.href} entry={e} />
           ))}
         </div>

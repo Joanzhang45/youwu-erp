@@ -3,13 +3,17 @@
 // M4 第二批追加 /inbound 進貨鏈時間軸展示資料（採購單／物流／選品候選）。
 // 新檔、不改動 demo-data.ts；商品資料直接重用既有 DEMO_PRODUCTS，避免重複維護兩份假資料。
 import type {
+  AdCost,
   ConsolidatedShipment,
   ConsolidatedShipmentItem,
   DomesticLogistics,
   MonthlyProfitability,
+  OperatingExpense,
   ProductSelection,
   PurchaseOrder,
   PurchaseOrderItem,
+  SalesOrder,
+  SalesOrderItem,
 } from "./database.types";
 import { DEMO_PRODUCTS } from "./demo-data";
 
@@ -590,4 +594,47 @@ export const DEMO_PRODUCT_SELECTIONS: ProductSelection[] = [
     created_at: `${demoDateOffset(20)}T02:00:00Z`,
     updated_at: `${demoDateOffset(15)}T02:00:00Z`,
   },
+];
+
+// ============================================================
+// /catalog /sales /spend 展示模式資料（M4 第三批）。
+// 訂單/費用金額同樣刻意挑跟 DEMO_MONTHLY_PROFITABILITY 同量級的好看整數，
+// 不套用真實營運數字（沿用 DEMO_DASHBOARD_STATS 頭的既有原則）。
+// ============================================================
+
+// 蝦皮商品對應工具區展示資料：2 筆未對應組合（呼應 PRD §2.3「208 組合僅 2 筆未對應」現況）
+export const DEMO_UNMAPPED_ITEMS = [
+  { product_name: "有物🧺北歐風收納籃 現貨", variant_name: "淺灰-M", count: 3 },
+  { product_name: "有物🧺矽藻土杯墊 隔日出貨", variant_name: "六角-粉色", count: 1 },
+];
+export const DEMO_MAPPED_COUNT = 206;
+
+export const DEMO_SALES_ORDERS: SalesOrder[] = [
+  { id: 5001, order_number: "2607120001", order_date: demoDateOffset(0), buyer_name: "l***3", order_amount: 1580, transaction_fee: -47, free_shipping_subsidy: 0, extended_prep_fee: -30, payment_processing_fee: -32, seller_coupon: 0, platform_coupon: -50, net_revenue: 1421, status: "待出貨", notes: null, created_at: `${demoDateOffset(0)}T03:00:00Z` },
+  { id: 5002, order_number: "2607110008", order_date: demoDateOffset(1), buyer_name: "c***h", order_amount: 890, transaction_fee: -27, free_shipping_subsidy: 0, extended_prep_fee: -18, payment_processing_fee: -18, seller_coupon: 0, platform_coupon: 0, net_revenue: 827, status: "已完成", notes: null, created_at: `${demoDateOffset(1)}T05:00:00Z` },
+  { id: 5003, order_number: "2607100015", order_date: demoDateOffset(2), buyer_name: "w***9", order_amount: 2360, transaction_fee: -71, free_shipping_subsidy: 0, extended_prep_fee: -47, payment_processing_fee: -47, seller_coupon: -100, platform_coupon: 0, net_revenue: 2095, status: "已完成", notes: null, created_at: `${demoDateOffset(2)}T07:00:00Z` },
+  { id: 5004, order_number: "2607090003", order_date: demoDateOffset(3), buyer_name: "s***2", order_amount: 599, transaction_fee: -18, free_shipping_subsidy: 0, extended_prep_fee: -12, payment_processing_fee: -12, seller_coupon: 0, platform_coupon: 0, net_revenue: 557, status: "已完成", notes: null, created_at: `${demoDateOffset(3)}T02:00:00Z` },
+  { id: 5005, order_number: "2607080011", order_date: demoDateOffset(4), buyer_name: "t***a", order_amount: 138, transaction_fee: -4, free_shipping_subsidy: 0, extended_prep_fee: -3, payment_processing_fee: -3, seller_coupon: 0, platform_coupon: 0, net_revenue: 128, status: "取消", notes: null, created_at: `${demoDateOffset(4)}T09:00:00Z` },
+  { id: 5006, order_number: "2606280006", order_date: demoDateOffset(15), buyer_name: "y***o", order_amount: 1099, transaction_fee: -33, free_shipping_subsidy: 0, extended_prep_fee: -22, payment_processing_fee: -22, seller_coupon: 0, platform_coupon: -50, net_revenue: 972, status: "已完成", notes: null, created_at: `${demoDateOffset(15)}T04:00:00Z` },
+];
+
+export const DEMO_SALES_ORDER_ITEMS: Record<number, SalesOrderItem[]> = {
+  5001: [{ id: 50011, order_id: 5001, product_id: 2, product_name: DEMO_PRODUCTS[1].product_name, variant_name: DEMO_PRODUCTS[1].variant_name, qty: 1, unit_price: 599, subtotal: 599 }, { id: 50012, order_id: 5001, product_id: 1, product_name: DEMO_PRODUCTS[0].product_name, variant_name: DEMO_PRODUCTS[0].variant_name, qty: 1, unit_price: 99, subtotal: 99 }],
+  5002: [{ id: 50021, order_id: 5002, product_id: 8, product_name: DEMO_PRODUCTS[7].product_name, variant_name: DEMO_PRODUCTS[7].variant_name, qty: 1, unit_price: 199, subtotal: 199 }],
+  5003: [{ id: 50031, order_id: 5003, product_id: 2, product_name: DEMO_PRODUCTS[1].product_name, variant_name: DEMO_PRODUCTS[1].variant_name, qty: 2, unit_price: 599, subtotal: 1198 }],
+  5004: [{ id: 50041, order_id: 5004, product_id: 2, product_name: DEMO_PRODUCTS[1].product_name, variant_name: DEMO_PRODUCTS[1].variant_name, qty: 1, unit_price: 599, subtotal: 599 }],
+  5005: [{ id: 50051, order_id: 5005, product_id: 3, product_name: DEMO_PRODUCTS[2].product_name, variant_name: DEMO_PRODUCTS[2].variant_name, qty: 1, unit_price: 39, subtotal: 39 }],
+  5006: [{ id: 50061, order_id: 5006, product_id: 8, product_name: DEMO_PRODUCTS[7].product_name, variant_name: DEMO_PRODUCTS[7].variant_name, qty: 1, unit_price: 199, subtotal: 199 }],
+};
+
+export const DEMO_AD_COSTS: AdCost[] = [
+  { id: 4001, ad_date: demoDateOffset(1), amount: 620, description: "蝦皮商品廣告 - 收納好物", created_at: `${demoDateOffset(1)}T10:00:00Z` },
+  { id: 4002, ad_date: demoDateOffset(3), amount: 480, description: "蝦皮商品廣告 - 浴廁區", created_at: `${demoDateOffset(3)}T10:00:00Z` },
+  { id: 4003, ad_date: demoDateOffset(8), amount: 750, description: "蝦皮商品廣告 - 全站", created_at: `${demoDateOffset(8)}T10:00:00Z` },
+];
+
+export const DEMO_OPERATING_EXPENSES: OperatingExpense[] = [
+  { id: 3001, expense_date: demoDateOffset(2), category: "包材", item_name: "氣泡袋", quantity: 500, description: null, amount: 850, notes: null, created_at: `${demoDateOffset(2)}T08:00:00Z` },
+  { id: 3002, expense_date: demoDateOffset(6), category: "倉儲", item_name: "倉租", quantity: 1, description: null, amount: 3500, notes: "7 月倉租", created_at: `${demoDateOffset(6)}T08:00:00Z` },
+  { id: 3003, expense_date: demoDateOffset(10), category: "設備", item_name: "標籤機碳帶", quantity: 3, description: null, amount: 540, notes: null, created_at: `${demoDateOffset(10)}T08:00:00Z` },
 ];
