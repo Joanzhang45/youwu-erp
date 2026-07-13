@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/lib/AuthContext";
-import { signOutUser } from "@/lib/supabase";
-import { TodayIcon, StockIcon, MoreIcon, TimelineIcon, BoxIcon, ClipboardIcon, WalletIcon, InsightsIcon, LogoutIcon } from "./icons";
+import { TodayIcon, StockIcon, MoreIcon, TimelineIcon, BoxIcon, ClipboardIcon, WalletIcon, InsightsIcon } from "./icons";
 
 // M5：正式導覽（PRD §3 拍板），舊 13 頁全數退場為 redirect stub，全站只剩這一套導覽。
 // 手機底部 4 tab：今天／進貨／庫存／更多。
@@ -27,8 +25,10 @@ const TODAY_UMBRELLA = ["/today", "/receive"];
 const MORE_UMBRELLA = ["/more", "/insights", "/catalog", "/sales", "/spend", "/help"];
 
 // 桌機頂部 7 節點（PRD §3：今天／進貨／庫存／商品／訂單／費用／分析）。
-// PRD 原文寫「側欄」，但現況慣例（M2 起）是頂部細 nav；7 個文字節點＋圖示橫向排＋右側帳號區
+// PRD 原文寫「側欄」，但現況慣例（M2 起）是頂部細 nav；7 個文字節點＋圖示橫向排
 // 在桌機（≥640px）寬度完全放得下，不必為了照抄 PRD 字面改側欄付版面成本，故沿用頂部 nav。
+// M7（Joan 2026-07-14 二次拍板）：全站移除登入體驗，AuthProvider 背景自動登入，
+// 原本的右側帳號區（登入連結／登出按鈕）已無意義，整塊移除。
 const DESKTOP_NODES = [
   { href: "/today", label: "今天", Icon: TodayIcon, match: "/today" },
   { href: "/inbound", label: "進貨", Icon: TimelineIcon, match: "/inbound" },
@@ -41,7 +41,6 @@ const DESKTOP_NODES = [
 
 export function AppTabBar() {
   const pathname = usePathname();
-  const { session, loading } = useAuth();
   const cleanPath = pathname.replace(/^\/youwu-erp/, "") || "/";
 
   const isMobileActive = (match: string) => {
@@ -87,7 +86,7 @@ export function AppTabBar() {
         </div>
       </nav>
 
-      {/* 桌機：頂部細 nav，7 節點＋右側帳號區 */}
+      {/* 桌機：頂部細 nav，7 節點 */}
       <nav
         className="hidden sm:flex fixed top-0 left-0 right-0 z-50 h-14 bg-white/90 backdrop-blur border-b border-[#EAEAEA] items-center px-6"
         aria-label="主要導覽"
@@ -113,33 +112,6 @@ export function AppTabBar() {
               </Link>
             );
           })}
-        </div>
-
-        {/* 右側帳號區：登入態顯示 email＋登出；未登入（僅 /login /help 兩個公開頁會看到
-            這裡）顯示登入連結。舊版只有手機「更多」頁能登出，桌機 7 節點直達後不再繞去
-            /more，這裡補一個直接入口。 */}
-        <div className="flex-shrink-0 ml-4">
-          {!loading && (
-            <>
-              {!session ? (
-                <Link
-                  href="/login"
-                  className="text-sm font-medium text-[#0070F3] px-3 py-1.5 rounded-lg hover:bg-[#FAFAFA] transition-colors duration-150"
-                >
-                  登入
-                </Link>
-              ) : (
-                <button
-                  onClick={() => signOutUser()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-[#8F8F8F] hover:text-[#171717] hover:bg-[#FAFAFA] transition-colors duration-150"
-                  title={session?.user.email}
-                >
-                  <LogoutIcon className="w-4 h-4" />
-                  <span className="max-w-[140px] truncate">{session?.user.email}</span>
-                </button>
-              )}
-            </>
-          )}
         </div>
       </nav>
     </>

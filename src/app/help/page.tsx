@@ -3,12 +3,10 @@
 // 使用說明頁（/help，站內操作手冊）。寫給彣錩：非技術、用手機、常在收貨現場/貨架前操作，
 // 第一次看新版反映「光是進貨就找不到按哪裡」——這頁就是為他寫的白話說明書。
 //
-// 純靜態頁面，不打 Supabase、不驗證登入態。M6（2026-07-14）demo 假資料模式全站移除後，
-// /today /inbound /receive /stock /catalog /sales /spend /insights /more 9 個頁面都改用
-// RequireAuth 擋未登入訪客（見 src/components/app/RequireAuth.tsx），但這頁刻意不套那層——
-// 說明書內容本身不含任何帳密等敏感資訊，未登入也該看得到「怎麼登入」「怎麼操作」，不然
-// 反而卡在雞生蛋問題（要登入才看得到教你怎麼登入的頁面）。所以這裡不用 useAuth，
-// 也不需要 "use client" 以外的任何 hook。
+// 純靜態頁面，不打 Supabase、不驗證登入態。M7（2026-07-14 二次拍板）全站移除登入體驗後，
+// 整個「登入／未登入」的區分已經不存在——AuthProvider 背景自動登入，訪客感覺不到這件事，
+// 這頁也就不用再處理「未登入看得到嗎」的問題（改版前那句顧慮已經過時）。維持不用 useAuth、
+// 不需要 "use client" 以外任何 hook 的原因單純是這頁本來就是純靜態內容。
 //
 // 每節用原生 <details>/<summary>（Tailwind v4 group-open: 變體驅動展開圖示旋轉），
 // 不用 useState 手刻 accordion：語意正確、鍵盤可操作、免 JS 也能展開，最適合這種
@@ -173,8 +171,8 @@ export default function HelpPage() {
         {/* 第 5 節：常見問題 */}
         <Section title="常見問題">
           <div className="space-y-5">
-            <FAQItem q="打開變成要登入？">
-              輸入瓊安給你的帳號密碼登一次，以後就不用再登了。
+            <FAQItem q="換新手機？">
+              直接開網址就能用，不用設定、不用登入，跟原本那支手機看到的一樣。
             </FAQItem>
             <FAQItem q="我記得以前有一頁 OO，怎麼不見了？">
               沒有不見，是搬家了。開舊的網址會自動帶你到新的地方。
