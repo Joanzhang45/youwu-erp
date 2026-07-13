@@ -10,12 +10,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { DomesticLogistics, PurchaseOrder, PurchaseOrderItem, ReceivingRecord } from "@/lib/database.types";
-import { DEMO_PURCHASE_ORDERS, DEMO_PURCHASE_ORDER_ITEMS } from "@/lib/demo-data-app";
 import {
-  buildDemoChain,
   computeStageIndex,
   fetchInboundChain,
   isLogisticsDone,
@@ -63,7 +60,6 @@ type ChainData = {
 };
 
 export function PurchaseOrderTimeline({ poId }: { poId: number }) {
-  const { isDemo } = useAuth();
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -79,47 +75,30 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
     setLoading(true);
     setNotFound(false);
     try {
-      if (isDemo) {
-        const demoPo = DEMO_PURCHASE_ORDERS.find((p) => p.id === poId) || null;
-        if (!demoPo) {
-          setNotFound(true);
-          return;
-        }
-        setPo(demoPo);
-        setItems(DEMO_PURCHASE_ORDER_ITEMS[poId] || []);
-
-        const demoChain = buildDemoChain([demoPo.po_number]);
-        setChain({
-          logistics: demoChain.logisticsByPo.get(demoPo.po_number) || [],
-          shipmentGroups: demoChain.shipmentsByPo.get(demoPo.po_number) || [],
-          receivingByShipmentNumber: new Map(),
-        });
-      } else {
-        const supabase = getSupabase();
-        const [poRes, itemsRes] = await Promise.all([
-          supabase.from("purchase_orders").select("*").eq("id", poId).single(),
-          supabase.from("purchase_order_items").select("*").eq("po_id", poId).order("created_at"),
-        ]);
-        if (poRes.error || !poRes.data) {
-          setNotFound(true);
-          return;
-        }
-        setPo(poRes.data);
-        setItems(itemsRes.data || []);
-
-        const full = await fetchInboundChain([poRes.data.po_number]);
-        setChain({
-          logistics: full.logisticsByPo.get(poRes.data.po_number) || [],
-          shipmentGroups: full.shipmentsByPo.get(poRes.data.po_number) || [],
-          receivingByShipmentNumber: full.receivingByShipmentNumber,
-        });
+      const supabase = getSupabase();
+      const [poRes, itemsRes] = await Promise.all([
+        supabase.from("purchase_orders").select("*").eq("id", poId).single(),
+        supabase.from("purchase_order_items").select("*").eq("po_id", poId).order("created_at"),
+      ]);
+      if (poRes.error || !poRes.data) {
+        setNotFound(true);
+        return;
       }
+      setPo(poRes.data);
+      setItems(itemsRes.data || []);
+
+      const full = await fetchInboundChain([poRes.data.po_number]);
+      setChain({
+        logistics: full.logisticsByPo.get(poRes.data.po_number) || [],
+        shipmentGroups: full.shipmentsByPo.get(poRes.data.po_number) || [],
+        receivingByShipmentNumber: full.receivingByShipmentNumber,
+      });
     } catch (e) {
       toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
       setLoading(false);
     }
-  }, [isDemo, poId, toast]);
+  }, [poId, toast]);
 
   useEffect(() => {
     fetchAll();
@@ -129,11 +108,6 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
     if (!po) return;
     setBusyKey("order");
     try {
-      if (isDemo) {
-        setPo({ ...po, status_draft: false, status_ordered: true });
-        toast("已標記已下單（展示模式，未實際寫入）");
-        return;
-      }
       const { error } = await getSupabase()
         .from("purchase_orders")
         .update({ status_draft: false, status_ordered: true })
@@ -153,14 +127,6 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
     if (!step) return;
     setBusyKey(`log-${record.id}`);
     try {
-      if (isDemo) {
-        setChain((prev) => ({
-          ...prev,
-          logistics: prev.logistics.map((l) => (l.id === record.id ? { ...l, status: step.next } : l)),
-        }));
-        toast(`${step.cta}（展示模式，未實際寫入）`);
-        return;
-      }
       const patch: Partial<DomesticLogistics> = { status: step.next };
       if (step.next === "已入庫" && !record.actual_arrival) {
         patch.actual_arrival = new Date().toISOString().split("T")[0];
@@ -181,16 +147,6 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
     if (!step) return;
     setBusyKey(`ship-${group.shipment.id}`);
     try {
-      if (isDemo) {
-        setChain((prev) => ({
-          ...prev,
-          shipmentGroups: prev.shipmentGroups.map((g) =>
-            g.shipment.id === group.shipment.id ? { ...g, shipment: { ...g.shipment, status: step.next } } : g
-          ),
-        }));
-        toast(`${step.cta}（展示模式，未實際寫入）`);
-        return;
-      }
       const patch: Record<string, string> = { status: step.next };
       if (step.next === "已到達") patch.actual_arrival = new Date().toISOString().split("T")[0];
       const { error } = await getSupabase().from("consolidated_shipments").update(patch).eq("id", group.shipment.id);

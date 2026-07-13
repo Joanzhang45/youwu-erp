@@ -41,7 +41,7 @@ const DESKTOP_NODES = [
 
 export function AppTabBar() {
   const pathname = usePathname();
-  const { session, isDemo, loading } = useAuth();
+  const { session, loading } = useAuth();
   const cleanPath = pathname.replace(/^\/youwu-erp/, "") || "/";
 
   const isMobileActive = (match: string) => {
@@ -115,12 +115,13 @@ export function AppTabBar() {
           })}
         </div>
 
-        {/* 右側帳號區：登入態顯示 email＋登出；demo 態顯示登入連結。
-            舊版只有手機「更多」頁能登出，桌機 7 節點直達後不再繞去 /more，這裡補一個直接入口。 */}
+        {/* 右側帳號區：登入態顯示 email＋登出；未登入（僅 /login /help 兩個公開頁會看到
+            這裡）顯示登入連結。舊版只有手機「更多」頁能登出，桌機 7 節點直達後不再繞去
+            /more，這裡補一個直接入口。 */}
         <div className="flex-shrink-0 ml-4">
           {!loading && (
             <>
-              {isDemo ? (
+              {!session ? (
                 <Link
                   href="/login"
                   className="text-sm font-medium text-[#0070F3] px-3 py-1.5 rounded-lg hover:bg-[#FAFAFA] transition-colors duration-150"

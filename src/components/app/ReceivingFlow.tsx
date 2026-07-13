@@ -5,10 +5,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { calcLandedCost } from "@/lib/landedCost";
-import { DEMO_SHIPMENTS, DEMO_SHIPMENT_ITEMS } from "@/lib/demo-data-app";
 import type { ConsolidatedShipment } from "@/lib/database.types";
 import { CameraIcon, CheckIcon } from "./icons";
 
@@ -44,7 +42,6 @@ function draftKey(shipmentId: number) {
 }
 
 export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
-  const { isDemo } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -83,68 +80,46 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
   const fetchData = useCallback(async () => {
     setPhase("loading");
     try {
-      let shipData: ConsolidatedShipment;
-      let mapped: FlowItem[];
+      const supabase = getSupabase();
+      const [shipRes, itemsRes, poRes] = await Promise.all([
+        supabase.from("consolidated_shipments").select("*").eq("id", shipmentId).single(),
+        supabase.from("consolidated_shipment_items").select("*").eq("shipment_id", shipmentId),
+        supabase
+          .from("purchase_orders")
+          .select("cny_rate")
+          .not("cny_rate", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1),
+      ]);
+      if (shipRes.error) throw shipRes.error;
+      if (itemsRes.error) throw itemsRes.error;
+      const shipData: ConsolidatedShipment = shipRes.data;
+      if (poRes.data && poRes.data.length > 0 && poRes.data[0].cny_rate) {
+        cnyRateRef.current = Number(poRes.data[0].cny_rate);
+      }
 
-      if (isDemo) {
-        const s = DEMO_SHIPMENTS.find((x) => x.id === shipmentId);
-        if (!s) throw new Error("找不到集運單");
-        shipData = s;
-        mapped = (DEMO_SHIPMENT_ITEMS[shipmentId] || []).map((item) => ({
+      const productIds = (itemsRes.data || []).map((i) => i.product_id).filter(Boolean) as number[];
+      const { data: prodData } = productIds.length > 0
+        ? await supabase.from("products").select("id, product_image, purchase_price_cny, weight_kg").in("id", productIds)
+        : { data: [] };
+      const prodMap = new Map((prodData || []).map((p) => [p.id, p]));
+
+      let mapped: FlowItem[] = (itemsRes.data || []).map((item) => {
+        const prod = item.product_id ? prodMap.get(item.product_id) : undefined;
+        return {
           id: item.id,
           product_id: item.product_id,
           product_name: item.product_name || "未命名商品",
           variant_name: item.variant_name,
-          product_image: item.product_image,
+          product_image: prod?.product_image ?? null,
           expected_qty: item.qty || 0,
           actual_qty: item.qty || 0,
-          condition: "良好",
+          condition: "良好" as Condition,
           notes: "",
-          purchase_price_cny: item.purchase_price_cny,
-          weight_kg: item.weight_kg,
-        }));
-      } else {
-        const supabase = getSupabase();
-        const [shipRes, itemsRes, poRes] = await Promise.all([
-          supabase.from("consolidated_shipments").select("*").eq("id", shipmentId).single(),
-          supabase.from("consolidated_shipment_items").select("*").eq("shipment_id", shipmentId),
-          supabase
-            .from("purchase_orders")
-            .select("cny_rate")
-            .not("cny_rate", "is", null)
-            .order("created_at", { ascending: false })
-            .limit(1),
-        ]);
-        if (shipRes.error) throw shipRes.error;
-        if (itemsRes.error) throw itemsRes.error;
-        shipData = shipRes.data;
-        if (poRes.data && poRes.data.length > 0 && poRes.data[0].cny_rate) {
-          cnyRateRef.current = Number(poRes.data[0].cny_rate);
-        }
-
-        const productIds = (itemsRes.data || []).map((i) => i.product_id).filter(Boolean) as number[];
-        const { data: prodData } = productIds.length > 0
-          ? await supabase.from("products").select("id, product_image, purchase_price_cny, weight_kg").in("id", productIds)
-          : { data: [] };
-        const prodMap = new Map((prodData || []).map((p) => [p.id, p]));
-
-        mapped = (itemsRes.data || []).map((item) => {
-          const prod = item.product_id ? prodMap.get(item.product_id) : undefined;
-          return {
-            id: item.id,
-            product_id: item.product_id,
-            product_name: item.product_name || "未命名商品",
-            variant_name: item.variant_name,
-            product_image: prod?.product_image ?? null,
-            expected_qty: item.qty || 0,
-            actual_qty: item.qty || 0,
-            condition: "良好" as Condition,
-            notes: "",
-            purchase_price_cny: prod?.purchase_price_cny ?? null,
-            weight_kg: item.weight_kg ?? prod?.weight_kg ?? null,
-          };
-        });
-      }
+          purchase_price_cny: prod?.purchase_price_cny ?? null,
+          weight_kg: item.weight_kg ?? prod?.weight_kg ?? null,
+        };
+      });
 
       // 續點：比對 localStorage 草稿（A7）
       let restoredIndex = 0;
@@ -172,12 +147,8 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
       toast(e instanceof Error ? e.message : "載入失敗", "error");
       setPhase("error");
     }
-  }, [isDemo, shipmentId, toast]);
+  }, [shipmentId, toast]);
 
-  // 依賴 fetchData（其本身依賴 isDemo）而非只依賴 shipmentId：AuthProvider 掛載瞬間
-  // session 尚未解出、isDemo 暫時為 true，若只依 shipmentId 這裡只會跑一次、抓到那個暫時值，
-  // 直連/整頁刷新 /receive?shipment_id=X 會被誤判成 demo 分支找不到真實集運單而顯示「找不到」。
-  // 同一支 fetchData 對照 today/page.tsx、receive/page.tsx 既有安全寫法。
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -227,15 +198,6 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
   const submitReceiving = async () => {
     if (!shipment) return;
     setPhase("submitting");
-
-    if (isDemo) {
-      await new Promise((r) => setTimeout(r, 500));
-      clearDraft();
-      toast("點收完成！（展示模式，未實際寫入）");
-      setPhase("done");
-      setTimeout(() => router.push("/today"), 900);
-      return;
-    }
 
     let createdReceivingId: number | null = null;
     const updatedProductIds: { id: number; prev: { unit_cost_ntd: number | null; latest_po_number: string | null } }[] = [];

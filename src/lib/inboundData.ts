@@ -12,7 +12,6 @@ import type {
   DomesticLogistics,
   ReceivingRecord,
 } from "@/lib/database.types";
-import { DEMO_DOMESTIC_LOGISTICS, DEMO_SHIPMENTS, DEMO_SHIPMENT_ITEMS } from "@/lib/demo-data-app";
 
 export type ShipmentGroup = {
   shipment: ConsolidatedShipment;
@@ -148,26 +147,3 @@ export function computeStageIndex(
 }
 
 export const STAGE_LABELS = ["下單", "境內物流", "集運", "到貨", "點收入庫"] as const;
-
-// 展示模式版的 fetchInboundChain（同型別結構，來源改讀 demo-data-app 的固定資料，
-// 供 /inbound 列表頁與 PurchaseOrderTimeline 共用，避免兩處各自兜一份 demo 聚合邏輯）。
-export function buildDemoChain(poNumbers: string[]): InboundChain {
-  const logisticsByPo = new Map<string, DomesticLogistics[]>();
-  const shipmentsByPo = new Map<string, ShipmentGroup[]>();
-
-  for (const poNumber of poNumbers) {
-    const logistics = DEMO_DOMESTIC_LOGISTICS[poNumber];
-    if (logistics && logistics.length > 0) logisticsByPo.set(poNumber, logistics);
-
-    const groups: ShipmentGroup[] = [];
-    for (const [sidStr, its] of Object.entries(DEMO_SHIPMENT_ITEMS)) {
-      const matched = its.filter((i) => i.po_number === poNumber);
-      if (matched.length === 0) continue;
-      const shipment = DEMO_SHIPMENTS.find((s) => s.id === Number(sidStr));
-      if (shipment) groups.push({ shipment, items: matched });
-    }
-    if (groups.length > 0) shipmentsByPo.set(poNumber, groups);
-  }
-
-  return { logisticsByPo, shipmentsByPo, receivingByShipmentNumber: new Map() };
-}

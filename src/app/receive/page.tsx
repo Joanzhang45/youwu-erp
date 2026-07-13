@@ -6,9 +6,8 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import type { ConsolidatedShipment } from "@/lib/database.types";
-import { DEMO_SHIPMENTS, DEMO_SHIPMENT_ITEMS } from "@/lib/demo-data-app";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import { ReceivingFlow } from "@/components/app/ReceivingFlow";
 import { ReceiveIcon } from "@/components/app/icons";
 
@@ -21,9 +20,11 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function ReceivePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
-      <ReceiveContent />
-    </Suspense>
+    <RequireAuth>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
+        <ReceiveContent />
+      </Suspense>
+    </RequireAuth>
   );
 }
 
@@ -39,20 +40,11 @@ function ReceiveContent() {
 }
 
 function ShipmentSelectionList() {
-  const { isDemo } = useAuth();
   const [shipments, setShipments] = useState<ConsolidatedShipment[]>([]);
   const [itemCounts, setItemCounts] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchShipments = useCallback(async () => {
-    if (isDemo) {
-      setShipments(DEMO_SHIPMENTS);
-      setItemCounts(
-        Object.fromEntries(DEMO_SHIPMENTS.map((s) => [s.id, DEMO_SHIPMENT_ITEMS[s.id]?.length ?? 0]))
-      );
-      setLoading(false);
-      return;
-    }
     try {
       setLoading(true);
       const supabase = getSupabase();
@@ -81,7 +73,7 @@ function ShipmentSelectionList() {
     } finally {
       setLoading(false);
     }
-  }, [isDemo]);
+  }, []);
 
   useEffect(() => {
     fetchShipments();
@@ -89,11 +81,6 @@ function ShipmentSelectionList() {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">
-          展示模式 — 資料為模擬
-        </div>
-      )}
       <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">到貨點收</h1>
         <p className="text-sm text-[#8F8F8F] mt-0.5">在途與已到達的集運單</p>

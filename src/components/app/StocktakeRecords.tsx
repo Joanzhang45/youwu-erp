@@ -9,7 +9,6 @@
 // created_at 是完整時間戳不會）。
 import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 
 type SnapshotRow = { id: number; product_id: number; counted_qty: number; snapshot_date: string; note: string | null; created_at: string };
@@ -20,24 +19,6 @@ type Session = {
   snapshotDate: string;
   rows: SnapshotRow[];
   diffCount: number;
-};
-
-const DEMO_SESSIONS: Session[] = [
-  {
-    key: "demo-1",
-    snapshotDate: "2026-06-19",
-    diffCount: 2,
-    rows: [
-      { id: -1, product_id: 1, counted_qty: 42, snapshot_date: "2026-06-19", note: "盤點差異：帳上 44 → 實際 42（-2）", created_at: "2026-06-19T02:00:00Z" },
-      { id: -2, product_id: 3, counted_qty: 35, snapshot_date: "2026-06-19", note: "盤點：與帳上一致", created_at: "2026-06-19T02:00:00Z" },
-      { id: -3, product_id: 7, counted_qty: 8, snapshot_date: "2026-06-19", note: "盤點差異：帳上 5 → 實際 8（+3）", created_at: "2026-06-19T02:00:00Z" },
-    ],
-  },
-];
-const DEMO_PRODUCT_MAP: Record<number, ProductLite> = {
-  1: { id: 1, product_name: "矽藻土杯墊", variant_name: "圓形-大理石紋" },
-  3: { id: 3, product_name: "分裝瓶", variant_name: "100ml透明" },
-  7: { id: 7, product_name: "矽藻土杯墊", variant_name: "方形-素色白" },
 };
 
 function groupSessions(rows: SnapshotRow[]): Session[] {
@@ -60,7 +41,6 @@ function groupSessions(rows: SnapshotRow[]): Session[] {
 }
 
 export function StocktakeRecords() {
-  const { isDemo } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -70,11 +50,6 @@ export function StocktakeRecords() {
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
-      if (isDemo) {
-        setSessions(DEMO_SESSIONS);
-        setProducts(DEMO_PRODUCT_MAP);
-        return;
-      }
       const supabase = getSupabase();
       const { data, error } = await supabase
         .from("stock_snapshots")
@@ -100,7 +75,7 @@ export function StocktakeRecords() {
     } finally {
       setLoading(false);
     }
-  }, [isDemo, toast]);
+  }, [toast]);
 
   useEffect(() => {
     fetchRecords();
@@ -108,10 +83,6 @@ export function StocktakeRecords() {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">展示模式 — 資料為模擬</div>
-      )}
-
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
         <a href="/stock" className="inline-flex items-center gap-1 text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150 mb-2">
           ‹ 返回庫存

@@ -6,11 +6,10 @@
 // 列入 S3/S4 病灶，匯入本來就是這頁唯二的新增手段之一，沒有理由藏起來）。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import type { AdCost, OperatingExpense } from "@/lib/database.types";
-import { DEMO_AD_COSTS, DEMO_OPERATING_EXPENSES } from "@/lib/demo-data-app";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import { ExpenseFormSheet, type ExpenseFormValue } from "@/components/app/ExpenseFormSheet";
 import { PlusIcon } from "@/components/app/icons";
 
@@ -73,7 +72,14 @@ function parseAdsCSV(text: string): Partial<AdCost>[] {
 }
 
 export default function SpendPage() {
-  const { isDemo } = useAuth();
+  return (
+    <RequireAuth>
+      <SpendPageContent />
+    </RequireAuth>
+  );
+}
+
+function SpendPageContent() {
   const { toast } = useToast();
   const { confirm } = useConfirm();
 
@@ -103,13 +109,6 @@ export default function SpendPage() {
     async (reset: boolean) => {
       reset ? setAdsLoading(true) : setAdsLoadingMore(true);
       try {
-        if (isDemo) {
-          setAds(DEMO_AD_COSTS);
-          setAdsTotal(DEMO_AD_COSTS.length);
-          setAdsSum(DEMO_AD_COSTS.reduce((s, a) => s + (Number(a.amount) || 0), 0));
-          setAdsHasMore(false);
-          return;
-        }
         const supabase = getSupabase();
         const from = reset ? 0 : adsOffset;
         const { data, error, count } = await supabase
@@ -134,20 +133,13 @@ export default function SpendPage() {
         setAdsLoadingMore(false);
       }
     },
-    [isDemo, adsOffset, toast]
+    [adsOffset, toast]
   );
 
   const loadExpenses = useCallback(
     async (reset: boolean) => {
       reset ? setExpLoading(true) : setExpLoadingMore(true);
       try {
-        if (isDemo) {
-          setExpenses(DEMO_OPERATING_EXPENSES);
-          setExpTotal(DEMO_OPERATING_EXPENSES.length);
-          setExpSum(DEMO_OPERATING_EXPENSES.reduce((s, e) => s + (Number(e.amount) || 0), 0));
-          setExpHasMore(false);
-          return;
-        }
         const supabase = getSupabase();
         const from = reset ? 0 : expOffset;
         const { data, error, count } = await supabase
@@ -172,14 +164,14 @@ export default function SpendPage() {
         setExpLoadingMore(false);
       }
     },
-    [isDemo, expOffset, toast]
+    [expOffset, toast]
   );
 
   useEffect(() => {
     loadAds(true);
     loadExpenses(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDemo]);
+  }, []);
 
   const handleAdsImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -190,10 +182,6 @@ export default function SpendPage() {
       const parsed = parseAdsCSV(text);
       if (parsed.length === 0) {
         toast("無法解析 CSV", "error");
-        return;
-      }
-      if (isDemo) {
-        toast("展示模式，未實際寫入", "info");
         return;
       }
       const { error } = await getSupabase().from("ad_costs").insert(parsed);
@@ -211,10 +199,6 @@ export default function SpendPage() {
   const deleteAd = async (id: number) => {
     const ok = await confirm({ title: "刪除廣告費用", message: "確定刪除此筆廣告費用？", confirmText: "刪除", danger: true });
     if (!ok) return;
-    if (isDemo) {
-      toast("展示模式，未實際寫入", "info");
-      return;
-    }
     const { error } = await getSupabase().from("ad_costs").delete().eq("id", id);
     if (error) {
       toast(error.message, "error");
@@ -227,10 +211,6 @@ export default function SpendPage() {
   const deleteExpense = async (id: number) => {
     const ok = await confirm({ title: "刪除營業費用", message: "確定刪除此筆營業費用？", confirmText: "刪除", danger: true });
     if (!ok) return;
-    if (isDemo) {
-      toast("展示模式，未實際寫入", "info");
-      return;
-    }
     const { error } = await getSupabase().from("operating_expenses").delete().eq("id", id);
     if (error) {
       toast(error.message, "error");
@@ -250,12 +230,6 @@ export default function SpendPage() {
       amount: Number(form.amount),
       notes: form.notes || null,
     };
-    if (isDemo) {
-      toast("展示模式，未實際寫入", "info");
-      setShowForm(false);
-      setEditing(undefined);
-      return;
-    }
     if (editing) {
       const { error } = await getSupabase().from("operating_expenses").update(payload).eq("id", editing.id);
       if (error) throw error;
@@ -272,10 +246,6 @@ export default function SpendPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">展示模式 — 資料為模擬</div>
-      )}
-
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">費用</h1>
         <p className="text-sm text-[#8F8F8F] mt-0.5">

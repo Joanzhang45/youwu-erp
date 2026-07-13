@@ -9,8 +9,8 @@ import { CheckIcon } from "./icons";
 
 const CATEGORIES = ["包材", "倉儲", "人事", "物流", "軟體", "設備", "其他"];
 
-// 本地日期字串（不經過 toISOString 的 UTC 轉換）——避開 demo-data-app.ts 已記錄過的同一顆
-// 時區 bug 類型（台北 UTC+8，00:00~07:59 本地時間用 toISOString().slice(0,10) 會退回前一天）。
+// 本地日期字串（不經過 toISOString 的 UTC 轉換）——避開同一顆時區 bug 類型
+// （台北 UTC+8，00:00~07:59 本地時間用 toISOString().slice(0,10) 會退回前一天）。
 function todayLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

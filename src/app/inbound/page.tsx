@@ -8,10 +8,9 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import type { PurchaseOrder } from "@/lib/database.types";
-import { DEMO_PURCHASE_ORDERS } from "@/lib/demo-data-app";
-import { buildDemoChain, computeStageIndex, fetchInboundChain, STAGE_LABELS, type InboundChain } from "@/lib/inboundData";
+import { computeStageIndex, fetchInboundChain, STAGE_LABELS, type InboundChain } from "@/lib/inboundData";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import { PurchaseOrderTimeline } from "@/components/app/PurchaseOrderTimeline";
 import { SelectionCandidateDetail, SelectionCandidatesSection } from "@/components/app/SelectionCandidates";
 import { ChevronRightIcon } from "@/components/app/icons";
@@ -20,9 +19,11 @@ const HISTORY_PAGE_SIZE = 20;
 
 export default function InboundPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
-      <InboundContent />
-    </Suspense>
+    <RequireAuth>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
+        <InboundContent />
+      </Suspense>
+    </RequireAuth>
   );
 }
 
@@ -41,7 +42,6 @@ function money(n: number | null | undefined): string {
 }
 
 function InboundHome() {
-  const { isDemo } = useAuth();
   const [active, setActive] = useState<PurchaseOrder[]>([]);
   const [chain, setChain] = useState<InboundChain>({
     logisticsByPo: new Map(),
@@ -60,12 +60,6 @@ function InboundHome() {
   const fetchActive = useCallback(async () => {
     setLoading(true);
     try {
-      if (isDemo) {
-        const list = DEMO_PURCHASE_ORDERS.filter((p) => !p.status_received && !p.status_cancelled);
-        setActive(list);
-        setChain(buildDemoChain(list.map((p) => p.po_number)));
-        return;
-      }
       const supabase = getSupabase();
       const { data, error } = await supabase
         .from("purchase_orders")
@@ -83,7 +77,7 @@ function InboundHome() {
     } finally {
       setLoading(false);
     }
-  }, [isDemo]);
+  }, []);
 
   useEffect(() => {
     fetchActive();
@@ -93,13 +87,6 @@ function InboundHome() {
     async (reset: boolean) => {
       setHistoryLoading(true);
       try {
-        if (isDemo) {
-          const list = DEMO_PURCHASE_ORDERS.filter((p) => p.status_received || p.status_cancelled);
-          setHistory(list);
-          setHistoryHasMore(false);
-          setHistoryTotal(list.length);
-          return;
-        }
         const supabase = getSupabase();
         const offset = reset ? 0 : historyOffset;
         const { data, error, count } = await supabase
@@ -120,7 +107,7 @@ function InboundHome() {
         setHistoryLoading(false);
       }
     },
-    [isDemo, historyOffset]
+    [historyOffset]
   );
 
   const toggleHistory = () => {
@@ -131,12 +118,6 @@ function InboundHome() {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">
-          展示模式 — 資料為模擬
-        </div>
-      )}
-
       <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">進貨</h1>
         <p className="text-sm text-[#8F8F8F] mt-0.5">選品 → 採購 → 集運 → 到貨 → 點收，一條鏈看完</p>

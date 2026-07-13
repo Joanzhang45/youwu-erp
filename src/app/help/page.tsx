@@ -3,10 +3,12 @@
 // 使用說明頁（/help，站內操作手冊）。寫給彣錩：非技術、用手機、常在收貨現場/貨架前操作，
 // 第一次看新版反映「光是進貨就找不到按哪裡」——這頁就是為他寫的白話說明書。
 //
-// 純靜態頁面，不打 Supabase、不驗證登入態，未登入（展示模式）也能整頁看到完整內容
-// （內容本身不含任何帳密等敏感資訊）。刻意不套用其他頁面「isDemo 顯示黃色展示模式橫幅」
-// 的慣例：這頁沒有任何「資料」可展示為真或為假，掛那條橫幅只會讓人誤以為「這頁教的東西
-// 也是假的」，反而混淆——所以這裡不用 useAuth，也不需要 "use client" 以外的任何 hook。
+// 純靜態頁面，不打 Supabase、不驗證登入態。M6（2026-07-14）demo 假資料模式全站移除後，
+// /today /inbound /receive /stock /catalog /sales /spend /insights /more 9 個頁面都改用
+// RequireAuth 擋未登入訪客（見 src/components/app/RequireAuth.tsx），但這頁刻意不套那層——
+// 說明書內容本身不含任何帳密等敏感資訊，未登入也該看得到「怎麼登入」「怎麼操作」，不然
+// 反而卡在雞生蛋問題（要登入才看得到教你怎麼登入的頁面）。所以這裡不用 useAuth，
+// 也不需要 "use client" 以外的任何 hook。
 //
 // 每節用原生 <details>/<summary>（Tailwind v4 group-open: 變體驅動展開圖示旋轉），
 // 不用 useState 手刻 accordion：語意正確、鍵盤可操作、免 JS 也能展開，最適合這種
@@ -171,8 +173,8 @@ export default function HelpPage() {
         {/* 第 5 節：常見問題 */}
         <Section title="常見問題">
           <div className="space-y-5">
-            <FAQItem q="數字看起來怪怪的、都是假的？">
-              你還沒登入。畫面最上面有一條黃黃的「展示模式」就是還沒登入，去登入，帳號密碼問瓊安。
+            <FAQItem q="打開變成要登入？">
+              輸入瓊安給你的帳號密碼登一次，以後就不用再登了。
             </FAQItem>
             <FAQItem q="我記得以前有一頁 OO，怎麼不見了？">
               沒有不見，是搬家了。開舊的網址會自動帶你到新的地方。
@@ -185,7 +187,7 @@ export default function HelpPage() {
         </Section>
 
         <p className="text-sm text-[#8F8F8F] text-center pt-3">
-          這頁會跟著系統更新。最後更新：2026-07-12
+          這頁會跟著系統更新。最後更新：2026-07-14
         </p>
 
         <p className="text-center pt-1">

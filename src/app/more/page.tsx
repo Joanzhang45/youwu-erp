@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { signOutUser } from "@/lib/supabase";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import {
   InsightsIcon,
   BoxIcon,
@@ -55,16 +56,20 @@ function EntryRow({ entry }: { entry: Entry }) {
 }
 
 export default function MorePage() {
-  const { session, isDemo, loading } = useAuth();
+  return (
+    <RequireAuth>
+      <MorePageContent />
+    </RequireAuth>
+  );
+}
+
+function MorePageContent() {
+  // 這頁被 RequireAuth 擋在外層，能渲染到這裡代表 session 一定存在（未登入已被導去 /login），
+  // 不再需要 isDemo/loading 分支判斷「登入」還是「登出」——一律是登出。
+  const { session } = useAuth();
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">
-          展示模式 — 資料為模擬
-        </div>
-      )}
-
       <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">更多</h1>
       </header>
@@ -81,34 +86,18 @@ export default function MorePage() {
         </div>
 
         <div className="rounded-2xl border border-[#EAEAEA] overflow-hidden">
-          {!loading && (
-            <>
-              {isDemo ? (
-                <Link
-                  href="/login"
-                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-[#FAFAFA] transition-colors duration-150"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] flex items-center justify-center flex-shrink-0 text-[#171717]">
-                    <LogoutIcon className="w-[18px] h-[18px]" />
-                  </div>
-                  <p className="text-sm font-medium text-[#0070F3]">登入</p>
-                </Link>
-              ) : (
-                <button
-                  onClick={() => signOutUser()}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#FAFAFA] transition-colors duration-150 text-left"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] flex items-center justify-center flex-shrink-0 text-[#171717]">
-                    <LogoutIcon className="w-[18px] h-[18px]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#171717]">登出</p>
-                    <p className="text-xs text-[#8F8F8F] truncate">{session?.user.email}</p>
-                  </div>
-                </button>
-              )}
-            </>
-          )}
+          <button
+            onClick={() => signOutUser()}
+            className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#FAFAFA] transition-colors duration-150 text-left"
+          >
+            <div className="w-9 h-9 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] flex items-center justify-center flex-shrink-0 text-[#171717]">
+              <LogoutIcon className="w-[18px] h-[18px]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[#171717]">登出</p>
+              <p className="text-xs text-[#8F8F8F] truncate">{session?.user.email}</p>
+            </div>
+          </button>
         </div>
       </main>
     </div>

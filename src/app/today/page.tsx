@@ -3,15 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import type { ConsolidatedShipment } from "@/lib/database.types";
-import {
-  DEMO_SHIPMENTS,
-  DEMO_SHIPMENT_ITEMS,
-  DEMO_RECENT_ACTIVITY,
-  DEMO_LAST_STOCKTAKE_DAYS,
-  DEMO_KPI,
-} from "@/lib/demo-data-app";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import { ReceiveIcon, ChevronRightIcon } from "@/components/app/icons";
 
 type ArrivedTask = { shipment: ConsolidatedShipment; itemCount: number };
@@ -53,30 +46,18 @@ function timeAgo(iso: string): string {
 }
 
 export default function TodayPage() {
-  const { isDemo } = useAuth();
+  return (
+    <RequireAuth>
+      <TodayPageContent />
+    </RequireAuth>
+  );
+}
+
+function TodayPageContent() {
   const [data, setData] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    if (isDemo) {
-      const arrived = DEMO_SHIPMENTS.filter((s) => s.status === "已到達").map((s) => ({
-        shipment: s,
-        itemCount: DEMO_SHIPMENT_ITEMS[s.id]?.length ?? 0,
-      }));
-      const inTransitCount = DEMO_SHIPMENTS.filter((s) =>
-        ["準備中", "已出發", "運送中"].includes(s.status || "")
-      ).length;
-      setData({
-        arrived,
-        inTransitCount,
-        lastStocktakeDays: DEMO_LAST_STOCKTAKE_DAYS,
-        kpi: DEMO_KPI,
-        recent: DEMO_RECENT_ACTIVITY,
-      });
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       const supabase = getSupabase();
@@ -169,7 +150,7 @@ export default function TodayPage() {
     } finally {
       setLoading(false);
     }
-  }, [isDemo]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -187,12 +168,6 @@ export default function TodayPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">
-          展示模式 — 資料為模擬
-        </div>
-      )}
-
       <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
         <p className="text-sm text-[#8F8F8F]">{dateLabel}</p>
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight mt-0.5">今天</h1>

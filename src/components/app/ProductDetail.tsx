@@ -7,10 +7,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
-import { DEMO_PRODUCTS } from "@/lib/demo-data";
 import { ChevronRightIcon, CheckIcon } from "./icons";
 
 const STATUS_OPTIONS = ["測品", "常駐", "停售"];
@@ -41,7 +39,6 @@ function toEditForm(p: Product): EditForm {
 }
 
 export function ProductDetail({ id }: { id: number }) {
-  const { isDemo } = useAuth();
   const { toast } = useToast();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,16 +50,6 @@ export function ProductDetail({ id }: { id: number }) {
     setLoading(true);
     setNotFound(false);
     try {
-      if (isDemo) {
-        const p = DEMO_PRODUCTS.find((d) => d.id === id) || null;
-        if (!p) {
-          setNotFound(true);
-        } else {
-          setProduct(p);
-          setForm(toEditForm(p));
-        }
-        return;
-      }
       const supabase = getSupabase();
       const { data, error } = await supabase.from("v_products_with_stock").select("*").eq("id", id).maybeSingle();
       if (error) throw error;
@@ -77,7 +64,7 @@ export function ProductDetail({ id }: { id: number }) {
     } finally {
       setLoading(false);
     }
-  }, [id, isDemo]);
+  }, [id]);
 
   useEffect(() => {
     fetchProduct();
@@ -85,10 +72,6 @@ export function ProductDetail({ id }: { id: number }) {
 
   const handleSave = async () => {
     if (!form || !product) return;
-    if (isDemo) {
-      toast("展示模式，未實際寫入", "info");
-      return;
-    }
     setSaving(true);
     try {
       const { error } = await getSupabase().from("products").update(form).eq("id", product.id);
@@ -123,10 +106,6 @@ export function ProductDetail({ id }: { id: number }) {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">展示模式 — 資料為模擬</div>
-      )}
-
       <header className="px-5 pt-6 pb-2 max-w-2xl mx-auto">
         <Link href="/catalog" className="inline-flex items-center gap-1 text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150">
           <ChevronRightIcon className="w-4 h-4 rotate-180" />

@@ -9,11 +9,9 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
-import { DEMO_PRODUCTS } from "@/lib/demo-data";
-import { DEMO_MAPPED_COUNT, DEMO_UNMAPPED_ITEMS } from "@/lib/demo-data-app";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import { ProductDetail } from "@/components/app/ProductDetail";
 import { ProductFormSheet } from "@/components/app/ProductFormSheet";
 import { ChevronRightIcon, PlusIcon, SearchIcon, LinkIcon } from "@/components/app/icons";
@@ -22,9 +20,11 @@ const PAGE_SIZE = 20;
 
 export default function CatalogPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
-      <CatalogContent />
-    </Suspense>
+    <RequireAuth>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
+        <CatalogContent />
+      </Suspense>
+    </RequireAuth>
   );
 }
 
@@ -40,7 +40,6 @@ function isNotDiscontinued(p: Product): boolean {
 }
 
 function CatalogHome() {
-  const { isDemo } = useAuth();
   const { toast } = useToast();
 
   const [searchInput, setSearchInput] = useState("");
@@ -72,21 +71,6 @@ function CatalogHome() {
     async (reset: boolean) => {
       reset ? setLoading(true) : setLoadingMore(true);
       try {
-        if (isDemo) {
-          const q = search.toLowerCase();
-          const filtered = q
-            ? DEMO_PRODUCTS.filter(
-                (p) =>
-                  p.product_name.toLowerCase().includes(q) ||
-                  p.sku?.toLowerCase().includes(q) ||
-                  p.variant_name?.toLowerCase().includes(q)
-              )
-            : DEMO_PRODUCTS;
-          setItems(filtered);
-          setTotal(filtered.length);
-          setHasMore(false);
-          return;
-        }
         const supabase = getSupabase();
         const from = reset ? 0 : offset;
         let query = supabase.from("v_products_with_stock").select("*", { count: "exact" }).order("product_name");
@@ -108,21 +92,16 @@ function CatalogHome() {
         setLoadingMore(false);
       }
     },
-    [isDemo, search, offset, toast]
+    [search, offset, toast]
   );
 
   useEffect(() => {
     loadPage(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDemo, search]);
+  }, [search]);
 
   const createProduct = async (form: Partial<Product>) => {
     if (!form.product_name?.trim()) throw new Error("請輸入商品名稱");
-    if (isDemo) {
-      toast("展示模式，未實際寫入", "info");
-      setShowAdd(false);
-      return;
-    }
     const { error } = await getSupabase()
       .from("products")
       .insert({
@@ -147,10 +126,6 @@ function CatalogHome() {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">展示模式 — 資料為模擬</div>
-      )}
-
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">商品</h1>
@@ -265,7 +240,6 @@ function ProductRow({ product: p }: { product: Product }) {
 type UnmappedCombo = { product_name: string; variant_name: string; count: number };
 
 function MappingTool() {
-  const { isDemo } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [unmapped, setUnmapped] = useState<UnmappedCombo[]>([]);
@@ -278,14 +252,6 @@ function MappingTool() {
   const fetchTool = useCallback(async () => {
     setLoading(true);
     try {
-      if (isDemo) {
-        setUnmapped(DEMO_UNMAPPED_ITEMS);
-        setMappedCount(DEMO_MAPPED_COUNT);
-        setProducts(
-          DEMO_PRODUCTS.map((p) => ({ id: p.id, product_name: p.product_name, variant_name: p.variant_name, sku: p.sku }))
-        );
-        return;
-      }
       const supabase = getSupabase();
       const [unmappedRes, mappedCountRes, prodRes] = await Promise.all([
         supabase.from("sales_order_items").select("product_name, variant_name").is("product_id", null),
@@ -308,7 +274,7 @@ function MappingTool() {
     } finally {
       setLoading(false);
     }
-  }, [isDemo, toast]);
+  }, [toast]);
 
   useEffect(() => {
     fetchTool();
@@ -323,11 +289,6 @@ function MappingTool() {
   }, [products, pickerSearch]);
 
   const applyMapping = async (combo: UnmappedCombo, productId: number) => {
-    if (isDemo) {
-      toast("展示模式，未實際寫入", "info");
-      setExpandedKey(null);
-      return;
-    }
     setSaving(true);
     try {
       let query = getSupabase().from("sales_order_items").update({ product_id: productId }).eq("product_name", combo.product_name);

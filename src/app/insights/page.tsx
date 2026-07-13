@@ -7,11 +7,9 @@
 // PRD 明確要「本月 Top10/Bottom10」，所以這裡把 qty 改成從當期 order_items 即時加總）。
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { MonthlyProfitability, Product } from "@/lib/database.types";
-import { DEMO_MONTHLY_PROFITABILITY } from "@/lib/demo-data-app";
-import { DEMO_PRODUCTS } from "@/lib/demo-data";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import { MonthlyTrendChart } from "@/components/app/MonthlyTrendChart";
 
 type Period = "month" | "lastMonth" | "custom";
@@ -107,7 +105,14 @@ function buildRanked(p: Product, periodQty: number): RankedProduct {
 }
 
 export default function InsightsPage() {
-  const { isDemo } = useAuth();
+  return (
+    <RequireAuth>
+      <InsightsPageContent />
+    </RequireAuth>
+  );
+}
+
+function InsightsPageContent() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [monthly, setMonthly] = useState<MonthlyProfitability[]>([]);
@@ -121,14 +126,6 @@ export default function InsightsPage() {
   const [expanded, setExpanded] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (isDemo) {
-      setMonthly(DEMO_MONTHLY_PROFITABILITY);
-      setProducts(DEMO_PRODUCTS);
-      setOrders([]);
-      setItems([]);
-      setLoading(false);
-      return;
-    }
     try {
       setLoading(true);
       const supabase = getSupabase();
@@ -171,7 +168,7 @@ export default function InsightsPage() {
     } finally {
       setLoading(false);
     }
-  }, [isDemo, toast]);
+  }, [toast]);
 
   useEffect(() => {
     fetchData();
@@ -246,11 +243,6 @@ export default function InsightsPage() {
 
   const ranked = useMemo(() => {
     const eligible = products.filter((p) => p.selling_price && p.selling_price > 0 && p.product_status !== "停售");
-    if (isDemo) {
-      // demo 沒有逐筆訂單可依期間篩選，用商品全時已售數量近似（僅展示用途，期間切換
-      // 視覺可互動但數字不變——這是刻意簡化，見交付報告偏離說明）
-      return eligible.map((p) => buildRanked(p, p.total_sold_qty || 0));
-    }
     if (!range) return [];
     const validOrderIds = new Set(
       orders
@@ -264,7 +256,7 @@ export default function InsightsPage() {
       }
     });
     return eligible.map((p) => buildRanked(p, qtyByProduct.get(p.id) || 0)).filter((r) => r.periodQty > 0);
-  }, [isDemo, products, orders, items, range]);
+  }, [products, orders, items, range]);
 
   const activeList = useMemo(() => {
     const sorted = [...ranked].sort((a, b) => (rankTab === "top" ? b.totalProfit - a.totalProfit : a.totalProfit - b.totalProfit));
@@ -275,12 +267,6 @@ export default function InsightsPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">
-          展示模式 — 資料為模擬
-        </div>
-      )}
-
       <header className="px-5 pt-6 pb-4 max-w-3xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">分析</h1>
         <p className="text-sm text-[#8F8F8F] mt-0.5">這個月賺不賺、該補什麼</p>

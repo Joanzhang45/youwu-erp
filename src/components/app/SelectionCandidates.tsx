@@ -7,10 +7,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { CompetitorProduct, ProductSelection, ProductVariant } from "@/lib/database.types";
-import { DEMO_PRODUCT_SELECTIONS } from "@/lib/demo-data-app";
 import { ChevronRightIcon, CheckIcon } from "./icons";
 
 // 沿用舊 /selections/detail 的狀態選項（+ 該頁缺漏的「評估中」，見 STATUS_BADGE 實際會出現的
@@ -31,18 +29,12 @@ const STATUS_BADGE: Record<string, string> = {
 const PAGE_SIZE = 20;
 
 export function SelectionCandidatesSection() {
-  const { isDemo } = useAuth();
   const [selections, setSelections] = useState<ProductSelection[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("全部");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const fetchData = useCallback(async () => {
-    if (isDemo) {
-      setSelections(DEMO_PRODUCT_SELECTIONS);
-      setLoading(false);
-      return;
-    }
     try {
       setLoading(true);
       // 選品評估是低頻動作（PRD §2.3：進貨重啟前低頻），實測全量僅 99 筆，遠低於長牆病門檻，
@@ -59,7 +51,7 @@ export function SelectionCandidatesSection() {
     } finally {
       setLoading(false);
     }
-  }, [isDemo]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -152,7 +144,6 @@ export function SelectionCandidatesSection() {
 }
 
 export function SelectionCandidateDetail({ id }: { id: number }) {
-  const { isDemo } = useAuth();
   const { toast } = useToast();
   const [selection, setSelection] = useState<ProductSelection | null>(null);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
@@ -170,21 +161,6 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
   const fetchDetail = useCallback(async () => {
     setLoading(true);
     setNotFound(false);
-    if (isDemo) {
-      const found = DEMO_PRODUCT_SELECTIONS.find((s) => s.id === id) || null;
-      if (!found) {
-        setNotFound(true);
-        setLoading(false);
-        return;
-      }
-      setSelection(found);
-      setEditStatus(found.status || "");
-      setEditNotes(found.notes || "");
-      setVariants([]);
-      setCompetitors([]);
-      setLoading(false);
-      return;
-    }
     try {
       const supabase = getSupabase();
       const [selRes, varRes, compRes] = await Promise.all([
@@ -206,7 +182,7 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
     } finally {
       setLoading(false);
     }
-  }, [id, isDemo]);
+  }, [id]);
 
   useEffect(() => {
     fetchDetail();
@@ -214,10 +190,6 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
 
   const handleSaveEdit = async () => {
     if (!selection) return;
-    if (isDemo) {
-      toast("展示模式，未實際寫入", "info");
-      return;
-    }
     setSaving(true);
     try {
       const { error } = await getSupabase()

@@ -8,10 +8,9 @@
 // metadata（PRD S3：機器識別符當人類介面）。CSV 匯入邏輯原樣搬移，入口降級收進工具區。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { SalesOrder, SalesOrderItem } from "@/lib/database.types";
-import { DEMO_SALES_ORDERS, DEMO_SALES_ORDER_ITEMS } from "@/lib/demo-data-app";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import { ChevronRightIcon, SearchIcon } from "@/components/app/icons";
 
 const PAGE_SIZE = 20;
@@ -53,7 +52,14 @@ function withOrderFilters<T>(query: T, search: string, status: string): T {
 }
 
 export default function SalesPage() {
-  const { isDemo } = useAuth();
+  return (
+    <RequireAuth>
+      <SalesPageContent />
+    </RequireAuth>
+  );
+}
+
+function SalesPageContent() {
   const { toast } = useToast();
 
   const [searchInput, setSearchInput] = useState("");
@@ -83,10 +89,6 @@ export default function SalesPage() {
 
   // 狀態下拉：一次性抓全部訂單的 status 欄位去重（欄位小、829 筆內，非全表其他欄位）
   useEffect(() => {
-    if (isDemo) {
-      setStatusOptions(Array.from(new Set(DEMO_SALES_ORDERS.map((o) => o.status).filter((s): s is string => !!s))));
-      return;
-    }
     (async () => {
       try {
         const rows = await fetchAllRows<{ status: string | null }>((from, to) =>
@@ -97,28 +99,12 @@ export default function SalesPage() {
         setStatusOptions([]);
       }
     })();
-  }, [isDemo]);
+  }, []);
 
   const loadPage = useCallback(
     async (reset: boolean) => {
       reset ? setLoading(true) : setLoadingMore(true);
       try {
-        if (isDemo) {
-          const filtered = DEMO_SALES_ORDERS.filter((o) => {
-            const matchSearch = !search || o.order_number?.includes(search) || o.buyer_name?.includes(search);
-            const matchStatus = status === "全部" || o.status === status;
-            return matchSearch && matchStatus;
-          });
-          setOrders(filtered);
-          setTotal(filtered.length);
-          setHasMore(false);
-          const itemsMap: Record<number, SalesOrderItem[]> = {};
-          filtered.forEach((o) => {
-            itemsMap[o.id] = DEMO_SALES_ORDER_ITEMS[o.id] || [];
-          });
-          setItemsByOrder(itemsMap);
-          return;
-        }
         const supabase = getSupabase();
         const from = reset ? 0 : offset;
         const query = withOrderFilters(
@@ -173,31 +159,16 @@ export default function SalesPage() {
         setLoadingMore(false);
       }
     },
-    [isDemo, search, status, offset, toast]
+    [search, status, offset, toast]
   );
 
   useEffect(() => {
     loadPage(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDemo, search, status]);
+  }, [search, status]);
 
   // 統計卡：永遠對目前篩選（search/status）出的全量聚合，不受分頁位置影響（PRD §5 口徑修正）
   const loadSummary = useCallback(async () => {
-    if (isDemo) {
-      const filtered = DEMO_SALES_ORDERS.filter((o) => {
-        const matchSearch = !search || o.order_number?.includes(search) || o.buyer_name?.includes(search);
-        const matchStatus = status === "全部" || o.status === status;
-        return matchSearch && matchStatus;
-      });
-      const totalRevenue = filtered.reduce((s, o) => s + (Number(o.order_amount) || 0), 0);
-      const totalNet = filtered.reduce((s, o) => s + (Number(o.net_revenue) || 0), 0);
-      const totalCOGS = filtered.reduce(
-        (s, o) => s + (DEMO_SALES_ORDER_ITEMS[o.id] || []).reduce((si, it) => si + (Number(it.unit_price) || 0) * (Number(it.qty) || 1) * 0.4, 0),
-        0
-      );
-      setSummary({ totalRevenue, totalNet, totalFees: totalRevenue - totalNet, totalCOGS, totalProfit: totalNet - totalCOGS, count: filtered.length });
-      return;
-    }
     setSummaryLoading(true);
     try {
       const supabase = getSupabase();
@@ -227,7 +198,7 @@ export default function SalesPage() {
     } finally {
       setSummaryLoading(false);
     }
-  }, [isDemo, search, status, toast]);
+  }, [search, status, toast]);
 
   useEffect(() => {
     loadSummary();
@@ -235,10 +206,6 @@ export default function SalesPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">展示模式 — 資料為模擬</div>
-      )}
-
       <header className="px-5 pt-6 pb-3 max-w-3xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">訂單</h1>
         <p className="text-sm text-[#8F8F8F] mt-0.5">共 {total.toLocaleString()} 筆訂單</p>

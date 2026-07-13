@@ -11,10 +11,9 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
-import { DEMO_PRODUCTS } from "@/lib/demo-data";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import { StockAdjustSheet } from "@/components/app/StockAdjustSheet";
 import { StocktakeFlow } from "@/components/app/StocktakeFlow";
 import { StocktakeRecords } from "@/components/app/StocktakeRecords";
@@ -28,9 +27,11 @@ function isNotDiscontinued(p: Product): boolean {
 
 export default function StockPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
-      <StockContent />
-    </Suspense>
+    <RequireAuth>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
+        <StockContent />
+      </Suspense>
+    </RequireAuth>
   );
 }
 
@@ -49,7 +50,6 @@ function StockContent() {
 type CategoryCount = { category: string; count: number };
 
 function CategorySelectionList() {
-  const { isDemo } = useAuth();
   const [categories, setCategories] = useState<CategoryCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [resumeCategory, setResumeCategory] = useState<string | null>(null);
@@ -58,15 +58,6 @@ function CategorySelectionList() {
     (async () => {
       setLoading(true);
       try {
-        if (isDemo) {
-          const map = new Map<string, number>();
-          DEMO_PRODUCTS.filter(isNotDiscontinued).forEach((p) => {
-            const cat = p.category || "（未分類）";
-            map.set(cat, (map.get(cat) || 0) + 1);
-          });
-          setCategories(Array.from(map, ([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count));
-          return;
-        }
         const { data, error } = await getSupabase().from("products").select("category, product_status");
         if (error) throw error;
         const map = new Map<string, number>();
@@ -95,14 +86,10 @@ function CategorySelectionList() {
     } catch {
       // localStorage 不可用忽略
     }
-  }, [isDemo]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">展示模式 — 資料為模擬</div>
-      )}
-
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
         <Link href="/stock" className="inline-flex items-center gap-1 text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150 mb-2">
           ‹ 返回庫存
@@ -147,7 +134,6 @@ function CategorySelectionList() {
 }
 
 function StockHome() {
-  const { isDemo } = useAuth();
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [recentIds, setRecentIds] = useState<number[]>([]);
@@ -156,12 +142,6 @@ function StockHome() {
   const [stockAction, setStockAction] = useState<StockAction>(null);
 
   const fetchProducts = useCallback(async () => {
-    if (isDemo) {
-      setProducts(DEMO_PRODUCTS);
-      setRecentIds(DEMO_PRODUCTS.slice(0, 4).map((p) => p.id));
-      setLoading(false);
-      return;
-    }
     try {
       setLoading(true);
       const supabase = getSupabase();
@@ -192,7 +172,7 @@ function StockHome() {
     } finally {
       setLoading(false);
     }
-  }, [isDemo, toast]);
+  }, [toast]);
 
   useEffect(() => {
     fetchProducts();
@@ -221,15 +201,6 @@ function StockHome() {
     if (!stockAction) return;
     const { product, type } = stockAction;
 
-    if (isDemo) {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === product.id ? { ...p, stock_qty: type === "in" ? p.stock_qty + qty : p.stock_qty - qty } : p))
-      );
-      setStockAction(null);
-      toast(`已模擬${type === "in" ? "入庫" : "出庫"} ${qty}（展示模式，未實際寫入）`);
-      return;
-    }
-
     const supabase = getSupabase();
     const { error } = await supabase.from("inventory_ledger").insert({
       product_id: product.id,
@@ -248,12 +219,6 @@ function StockHome() {
 
   return (
     <div className="min-h-screen bg-white">
-      {isDemo && (
-        <div className="bg-[#F5A623] text-[#171717] text-xs text-center py-1 font-medium">
-          展示模式 — 資料為模擬
-        </div>
-      )}
-
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">庫存</h1>
       </header>

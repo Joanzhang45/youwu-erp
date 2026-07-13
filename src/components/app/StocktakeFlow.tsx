@@ -19,10 +19,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
-import { DEMO_PRODUCTS } from "@/lib/demo-data";
 import { CheckIcon } from "./icons";
 
 type FlowItem = {
@@ -54,7 +52,6 @@ function todayLocal(): string {
 }
 
 export function StocktakeFlow({ category }: { category: string }) {
-  const { isDemo } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -89,35 +86,21 @@ export function StocktakeFlow({ category }: { category: string }) {
   const fetchItems = useCallback(async () => {
     setPhase("loading");
     try {
-      let mapped: FlowItem[];
-      if (isDemo) {
-        mapped = DEMO_PRODUCTS.filter((p) => (p.category || "（未分類）") === category && p.product_status !== "停售").map((p) => ({
-          id: p.id,
-          product_id: p.id,
-          product_name: p.product_name,
-          variant_name: p.variant_name,
-          product_image: p.product_image,
-          expected_qty: p.stock_qty,
-          actual_qty: p.stock_qty,
-          touched: false,
-        }));
-      } else {
-        const supabase = getSupabase();
-        let query = supabase.from("v_products_with_stock").select("*").neq("product_status", "停售").order("product_name");
-        query = category === "（未分類）" ? query.is("category", null) : query.eq("category", category);
-        const { data, error } = await query;
-        if (error) throw error;
-        mapped = ((data as Product[]) || []).map((p) => ({
-          id: p.id,
-          product_id: p.id,
-          product_name: p.product_name,
-          variant_name: p.variant_name,
-          product_image: p.product_image,
-          expected_qty: p.stock_qty,
-          actual_qty: p.stock_qty,
-          touched: false,
-        }));
-      }
+      const supabase = getSupabase();
+      let query = supabase.from("v_products_with_stock").select("*").neq("product_status", "停售").order("product_name");
+      query = category === "（未分類）" ? query.is("category", null) : query.eq("category", category);
+      const { data, error } = await query;
+      if (error) throw error;
+      let mapped: FlowItem[] = ((data as Product[]) || []).map((p) => ({
+        id: p.id,
+        product_id: p.id,
+        product_name: p.product_name,
+        variant_name: p.variant_name,
+        product_image: p.product_image,
+        expected_qty: p.stock_qty,
+        actual_qty: p.stock_qty,
+        touched: false,
+      }));
 
       let restoredIndex = 0;
       try {
@@ -143,7 +126,7 @@ export function StocktakeFlow({ category }: { category: string }) {
       toast(e instanceof Error ? e.message : "載入失敗", "error");
       setPhase("error");
     }
-  }, [isDemo, category, toast]);
+  }, [category, toast]);
 
   useEffect(() => {
     fetchItems();
@@ -181,15 +164,6 @@ export function StocktakeFlow({ category }: { category: string }) {
 
   const submitStocktake = async () => {
     setPhase("submitting");
-
-    if (isDemo) {
-      await new Promise((r) => setTimeout(r, 500));
-      clearDraft();
-      toast(`盤點完成！${diffItems.length} 項差異已更新（展示模式，未實際寫入）`);
-      setPhase("done");
-      setTimeout(() => router.push("/stock"), 900);
-      return;
-    }
 
     const supabase = getSupabase();
     let createdSnapshotIds: number[] = [];
