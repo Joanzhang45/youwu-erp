@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import type { ConsolidatedShipment } from "@/lib/database.types";
+import { isStockAlertEligible } from "@/lib/productStatus";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { ReceiveIcon, ChevronRightIcon } from "@/components/app/icons";
 
@@ -61,13 +62,16 @@ function TodayPageContent() {
     try {
       setLoading(true);
       const supabase = getSupabase();
-      const [shipRes, kpiRes, monthRes, snapshotRes, ledgerRes] = await Promise.all([
+      const [shipRes, stockRes, monthRes, snapshotRes, ledgerRes] = await Promise.all([
         supabase
           .from("consolidated_shipments")
           .select("*")
           .in("status", ["準備中", "已出發", "運送中", "已到達"])
           .order("expected_arrival", { ascending: true }),
-        supabase.from("v_dashboard_kpi").select("out_of_stock_count, low_stock_count").maybeSingle(),
+        // 缺貨/低庫存警示計數口徑：改成前端就地算（排除非在售品項），不動 v_dashboard_kpi
+        // 這顆 DB view（後端零動，2026-07-16 spec-外決定）。改讀 v_products_with_stock
+        // （既有 view，/stock /catalog 已在用）拿 product_status/stock_qty/safety_stock。
+        supabase.from("v_products_with_stock").select("product_status, stock_qty, safety_stock"),
         // M4：改讀 v_monthly_profitability（010/011），一次拿到營收＋毛利＋淨利，
         // 取代舊的 v_monthly_revenue（只有營收沒有毛利，M2 已知缺口，見 PRD §7.1）
         supabase
@@ -78,6 +82,14 @@ function TodayPageContent() {
         supabase.from("stock_snapshots").select("snapshot_date").order("snapshot_date", { ascending: false }).limit(1),
         supabase.from("inventory_ledger").select("id, product_id, movement_type, qty_delta, note, occurred_at").order("occurred_at", { ascending: false }).limit(5),
       ]);
+
+      // 排除停售/測品/季節款等非在售品項，只計「需要行動」的常駐/主力款缺貨與低庫存
+      // （2026-07-16：93 項缺貨含 16+ 項雜訊，彣錩/Joan 反映警示數字失真）
+      const alertEligible = (stockRes.data || []).filter((p) => isStockAlertEligible(p.product_status));
+      const outOfStockCount = alertEligible.filter((p) => (p.stock_qty || 0) <= 0).length;
+      const lowStockCount = alertEligible.filter(
+        (p) => (p.stock_qty || 0) > 0 && p.safety_stock != null && p.stock_qty <= p.safety_stock
+      ).length;
 
       const shipments = shipRes.data || [];
       const arrivedShipments = shipments.filter((s) => s.status === "已到達");
@@ -134,8 +146,8 @@ function TodayPageContent() {
           monthOrders: Number(monthRow?.order_count) || 0,
           monthGrossProfit: Math.round(Number(monthRow?.gross_profit) || 0),
           monthNetProfit: Math.round(Number(monthRow?.net_profit) || 0),
-          outOfStock: kpiRes.data?.out_of_stock_count || 0,
-          lowStock: kpiRes.data?.low_stock_count || 0,
+          outOfStock: outOfStockCount,
+          lowStock: lowStockCount,
         },
         recent,
       });
@@ -290,7 +302,7 @@ function TodayPageContent() {
                     {/* 附帶 2 修復（tester 2026-07-12）：舊寫法「125（1 項低庫存）」把缺貨/低庫存
                         兩個不同指標用括號嵌在一起，讀起來像同一件事的附註，量級差 100 倍時特別
                         突兀。改成大數字直接標單位＋用 · 並列第二個獨立指標，兩者視覺對等、語意
-                        分開。數字源不變，仍是 v_dashboard_kpi 的 out_of_stock_count/low_stock_count。 */}
+                        分開。數字源改為前端就地算（見上方 fetchData，2026-07-16 排除非在售品項）。 */}
                     <p
                       className={`text-2xl font-semibold tabular-nums ${
                         data.kpi.outOfStock > 0 ? "text-[#E00]" : "text-[#171717]"
@@ -301,6 +313,7 @@ function TodayPageContent() {
                     <p className="text-[11px] text-[#8F8F8F] mt-0.5">項缺貨 · {data.kpi.lowStock} 項低庫存</p>
                   </div>
                 </div>
+                <p className="text-[10px] text-[#8F8F8F] mt-3">不含停售/測品/季節款</p>
               </Link>
             )}
 
