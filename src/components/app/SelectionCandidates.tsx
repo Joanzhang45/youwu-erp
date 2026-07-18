@@ -9,7 +9,14 @@ import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import type { CompetitorProduct, ProductSelection, ProductVariant } from "@/lib/database.types";
-import { ChevronRightIcon, CheckIcon } from "./icons";
+import { ChevronRightIcon, CheckIcon, PlusIcon } from "./icons";
+
+// 本地日期字串（不經過 toISOString 的 UTC 轉換，同 ExpenseFormSheet／PurchaseOrderFormSheet
+// 慣例——台北 UTC+8，00:00~07:59 本地時間用 toISOString().slice(0,10) 會退回前一天）。
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 // 沿用舊 /selections/detail 的狀態選項（+ 該頁缺漏的「評估中」，見 STATUS_BADGE 實際會出現的
 // 8 種狀態），M5 死循環修復用：舊版編輯連結退場後，狀態／備註在這裡直接可改。
@@ -29,10 +36,12 @@ const STATUS_BADGE: Record<string, string> = {
 const PAGE_SIZE = 20;
 
 export function SelectionCandidatesSection() {
+  const { toast } = useToast();
   const [selections, setSelections] = useState<ProductSelection[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("全部");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [showAdd, setShowAdd] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -69,11 +78,34 @@ export function SelectionCandidatesSection() {
 
   const visible = filtered.slice(0, visibleCount);
 
+  const createCandidate = async (form: CandidateFormValue) => {
+    const { error } = await getSupabase()
+      .from("product_selections")
+      .insert({
+        product_name: form.product_name.trim(),
+        order_link: form.order_link.trim() || null,
+        order_amount_cny: form.order_amount_cny ? Number(form.order_amount_cny) : null,
+        notes: form.notes.trim() || null,
+        status: "考慮中",
+        selection_date: todayLocal(),
+      });
+    if (error) throw error;
+    setShowAdd(false);
+    toast("已新增選品候選");
+    fetchData();
+  };
+
   return (
     <section className="mt-8">
       <div className="flex items-center justify-between mb-2 px-1">
         <p className="text-xs font-medium text-[#8F8F8F]">選品候選</p>
-        <p className="text-[11px] text-[#8F8F8F]">{filtered.length} 筆</p>
+        <div className="flex items-center gap-3">
+          <p className="text-[11px] text-[#8F8F8F]">{filtered.length} 筆</p>
+          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 text-[11px] text-[#0070F3] font-medium">
+            <PlusIcon className="w-3.5 h-3.5" />
+            新增候選
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3">
@@ -139,7 +171,126 @@ export function SelectionCandidatesSection() {
           )}
         </>
       )}
+
+      {showAdd && <SelectionCandidateFormSheet onCreate={createCandidate} onClose={() => setShowAdd(false)} />}
     </section>
+  );
+}
+
+type CandidateFormValue = {
+  product_name: string;
+  order_link: string;
+  order_amount_cny: string;
+  notes: string;
+};
+
+const CANDIDATE_INITIAL: CandidateFormValue = { product_name: "", order_link: "", order_amount_cny: "", notes: "" };
+
+// 新增選品候選（改版時漏搬的建單流程起點，2026-07-18 補；PRD §5 任務④的入口）。
+// 視覺沿用 ProductFormSheet／ExpenseFormSheet 的 bottom sheet 慣例，欄位刻意精簡
+// （品名／連結／預估成本／備註）——款式、競品等低頻欄位仍走 SelectionCandidateDetail
+// 就地編輯或日後補值，不在「快速留一筆候選」這個第一步塞進去。
+export function SelectionCandidateFormSheet({
+  onCreate,
+  onClose,
+}: {
+  onCreate: (form: CandidateFormValue) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState<CandidateFormValue>(CANDIDATE_INITIAL);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!form.product_name.trim()) {
+      setError("請輸入品名");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onCreate(form);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "新增失敗");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center">
+      <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-[#EAEAEA] p-5 app-sheet-enter">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-[#171717]">新增選品候選</h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-[#FAFAFA] text-[#666666] hover:bg-[#EAEAEA] transition-colors duration-150"
+            aria-label="關閉"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-[#171717] mb-1">品名 *</label>
+            <input
+              type="text"
+              value={form.product_name}
+              onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+              placeholder="例：矽藻土杯墊"
+              className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#171717] mb-1">1688／淘寶連結</label>
+            <input
+              type="text"
+              value={form.order_link}
+              onChange={(e) => setForm({ ...form, order_link: e.target.value })}
+              placeholder="選填"
+              className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#171717] mb-1">預估成本（CNY）</label>
+            <input
+              type="number"
+              value={form.order_amount_cny}
+              onChange={(e) => setForm({ ...form, order_amount_cny: e.target.value })}
+              placeholder="選填"
+              className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#171717] mb-1">備註</label>
+            <input
+              type="text"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="選填"
+              className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150"
+            />
+          </div>
+        </div>
+
+        {error && <p className="text-[#E00] text-sm mt-3">{error}</p>}
+
+        <button
+          onClick={handleSubmit}
+          disabled={saving}
+          className="w-full mt-5 py-3.5 rounded-xl text-white font-semibold text-base bg-[#171717] active:scale-[0.98] transition-transform duration-150 disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {saving ? (
+            "新增中..."
+          ) : (
+            <>
+              <CheckIcon className="w-4 h-4" />
+              新增候選
+            </>
+          )}
+        </button>
+      </div>
+    </div>
   );
 }
 

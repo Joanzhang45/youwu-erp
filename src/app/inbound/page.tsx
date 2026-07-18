@@ -6,14 +6,15 @@
 // 都沒有則是本頁（進行中列表＋歷史摺疊＋選品候選入口）。
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import type { PurchaseOrder } from "@/lib/database.types";
 import { computeStageIndex, fetchInboundChain, STAGE_LABELS, type InboundChain } from "@/lib/inboundData";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { PurchaseOrderTimeline } from "@/components/app/PurchaseOrderTimeline";
+import { PurchaseOrderFormSheet } from "@/components/app/PurchaseOrderFormSheet";
 import { SelectionCandidateDetail, SelectionCandidatesSection } from "@/components/app/SelectionCandidates";
-import { ChevronRightIcon } from "@/components/app/icons";
+import { ChevronRightIcon, PlusIcon } from "@/components/app/icons";
 
 const HISTORY_PAGE_SIZE = 20;
 
@@ -42,6 +43,8 @@ function money(n: number | null | undefined): string {
 }
 
 function InboundHome() {
+  const router = useRouter();
+  const [showAddPo, setShowAddPo] = useState(false);
   const [active, setActive] = useState<PurchaseOrder[]>([]);
   const [chain, setChain] = useState<InboundChain>({
     logisticsByPo: new Map(),
@@ -118,9 +121,18 @@ function InboundHome() {
 
   return (
     <div className="min-h-screen bg-white">
-      <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">進貨</h1>
-        <p className="text-sm text-[#8F8F8F] mt-0.5">選品 → 採購 → 集運 → 到貨 → 點收，一條鏈看完</p>
+      <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">進貨</h1>
+          <p className="text-sm text-[#8F8F8F] mt-0.5">選品 → 採購 → 集運 → 到貨 → 點收，一條鏈看完</p>
+        </div>
+        <button
+          onClick={() => setShowAddPo(true)}
+          className="flex-shrink-0 min-h-11 px-4 rounded-full bg-[#171717] text-white text-sm font-medium flex items-center gap-1.5 active:scale-[0.97] transition-transform duration-150"
+        >
+          <PlusIcon className="w-4 h-4" />
+          叫貨
+        </button>
       </header>
 
       {/* pb-24（非 pb-10）：底部固定 AppTabBar 淨空加大，比照 PurchaseOrderTimeline 同批修復
@@ -180,6 +192,16 @@ function InboundHome() {
 
         <SelectionCandidatesSection />
       </main>
+
+      {showAddPo && (
+        <PurchaseOrderFormSheet
+          onClose={() => setShowAddPo(false)}
+          onCreated={(id) => {
+            setShowAddPo(false);
+            router.push(`/inbound?id=${id}`);
+          }}
+        />
+      )}
     </div>
   );
 }

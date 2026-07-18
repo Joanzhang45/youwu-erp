@@ -121,6 +121,11 @@ export interface PurchaseOrder {
   subtotal_cny: number | null
   customs_duty: number | null
   grand_total: number | null
+  // po_status_enum 欄位（supabase/migrations/003_rls_enum_views.sql 補的單一狀態欄，
+  // 原本漏補進這支型別檔——現場實測值域比該遷移檔定義的 10 個字面值多一個 'abnormal'，
+  // 疑似後續在 Supabase SQL editor 直接 ALTER TYPE 過、未回填 migration 檔，故用 string
+  // 寬鬆型別，不逼近可能不完整的 union，只在新增流程寫入 'ordered'。
+  status: string
   status_draft: boolean | null
   status_confirmed: boolean | null
   status_ordered: boolean | null
