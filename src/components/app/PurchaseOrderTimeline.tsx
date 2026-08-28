@@ -19,7 +19,8 @@ import {
   isShipmentArrived,
   type ShipmentGroup,
 } from "@/lib/inboundData";
-import { ChevronRightIcon, CheckIcon, ReceiveIcon } from "./icons";
+import { ChevronRightIcon, CheckIcon, ReceiveIcon, PlusIcon } from "./icons";
+import { ShipmentFormSheet, type ShipmentFormMode } from "./ShipmentFormSheet";
 
 const LOGISTICS_INDIVIDUAL_THRESHOLD = 4;
 
@@ -70,6 +71,9 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const [logisticsExpanded, setLogisticsExpanded] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  // 集運批次表單（建立／加入既有／編輯單頭）。集運鏈原本沒有任何建立入口，
+  // 新採購單走不到「到貨」，/today 的待點收卡永遠空著——見 ShipmentFormSheet 檔頭註解。
+  const [shipmentSheet, setShipmentSheet] = useState<{ mode: ShipmentFormMode; shipment?: ShipmentGroup["shipment"] } | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -306,10 +310,34 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
             ) : (
               <div className="mt-2 space-y-2">
                 {chain.shipmentGroups.map((g) => (
-                  <ShipmentRow key={g.shipment.id} group={g} busy={busyKey === `ship-${g.shipment.id}`} onAdvance={() => advanceShipment(g)} />
+                  <ShipmentRow
+                    key={g.shipment.id}
+                    group={g}
+                    busy={busyKey === `ship-${g.shipment.id}`}
+                    onAdvance={() => advanceShipment(g)}
+                    onEdit={() => setShipmentSheet({ mode: "edit", shipment: g.shipment })}
+                  />
                 ))}
               </div>
             )}
+            {/* 建立／加入入口：整條進貨鏈唯一能產生集運批次的地方。一張採購單可以分批出
+                （PO-20250724-001 實際拆成 4 批），所以已經有批次了也要留著入口；同理多張採購單
+                可以併同一個櫃，故並列「加入既有批次」。 */}
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => setShipmentSheet({ mode: "create" })}
+                className="flex-1 min-h-11 rounded-lg border border-dashed border-[#EAEAEA] text-xs font-medium text-[#171717] flex items-center justify-center gap-1.5 hover:border-[#171717] transition-colors duration-150"
+              >
+                <PlusIcon className="w-3.5 h-3.5" />
+                建立集運批次
+              </button>
+              <button
+                onClick={() => setShipmentSheet({ mode: "join" })}
+                className="flex-1 min-h-11 rounded-lg border border-dashed border-[#EAEAEA] text-xs font-medium text-[#171717] hover:border-[#171717] transition-colors duration-150"
+              >
+                加入既有批次
+              </button>
+            </div>
           </TimelineStep>
 
           {/* 節點 4：到貨 */}
@@ -368,6 +396,11 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-[#171717]">前往點收（{g.shipment.shipment_number}）</p>
                         <p className="text-[11px] text-[#8F8F8F] mt-0.5">{g.items.length} 個品項待點收</p>
+                        {/* 點收會用 total_cost_ntd 攤運費算落地成本，沒填就只有進價（見 landedCost.ts）， */}
+                        {/* 一旦點收成本就寫進 products.unit_cost_ntd，所以要在按下去之前講。 */}
+                        {!(g.shipment.total_cost_ntd != null && Number(g.shipment.total_cost_ntd) > 0) && (
+                          <p className="text-[11px] text-[#F5A623] mt-0.5">⚠ 還沒填運費，現在點收成本不含運費</p>
+                        )}
                       </div>
                       <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F] flex-shrink-0" />
                     </Link>
@@ -378,6 +411,20 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
           </TimelineStep>
         </ol>
       </main>
+
+      {shipmentSheet && (
+        <ShipmentFormSheet
+          mode={shipmentSheet.mode}
+          poId={po.id}
+          poNumber={po.po_number}
+          shipment={shipmentSheet.shipment}
+          onClose={() => setShipmentSheet(null)}
+          onSaved={() => {
+            setShipmentSheet(null);
+            fetchAll();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -455,10 +502,12 @@ function ShipmentRow({
   group,
   busy,
   onAdvance,
+  onEdit,
 }: {
   group: ShipmentGroup;
   busy: boolean;
   onAdvance: () => void;
+  onEdit: () => void;
 }) {
   const s = group.shipment;
   const step = s.status ? SHIPMENT_NEXT[s.status] : undefined;
@@ -478,13 +527,30 @@ function ShipmentRow({
           {s.status || "-"}
         </span>
       </div>
-      {step && (
+      {step ? (
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={onAdvance}
+            disabled={busy}
+            className="flex-1 min-h-11 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] text-xs font-medium text-[#171717] hover:border-[#171717] transition-colors duration-150 disabled:opacity-50"
+          >
+            {busy ? "處理中..." : step.cta}
+          </button>
+          <button
+            onClick={onEdit}
+            className="min-h-11 px-3 rounded-lg border border-[#EAEAEA] text-xs font-medium text-[#8F8F8F] hover:border-[#171717] hover:text-[#171717] transition-colors duration-150"
+          >
+            編輯
+          </button>
+        </div>
+      ) : (
+        // 沒有下一步＝狀態不在 SHIPMENT_NEXT（準備中/已出發/運送中）裡，例如歷史資料常見的
+        // 「已入庫」「已驗收」或整欄空白。這種批次在改版後完全沒有按鈕可按，只能從這裡更正。
         <button
-          onClick={onAdvance}
-          disabled={busy}
-          className="mt-2 w-full min-h-11 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] text-xs font-medium text-[#171717] hover:border-[#171717] transition-colors duration-150 disabled:opacity-50"
+          onClick={onEdit}
+          className="mt-2 w-full min-h-11 rounded-lg border border-[#EAEAEA] text-xs font-medium text-[#171717] hover:border-[#171717] transition-colors duration-150"
         >
-          {busy ? "處理中..." : step.cta}
+          {s.status ? "編輯／更正狀態" : "狀態空白，點我補上"}
         </button>
       )}
     </div>
