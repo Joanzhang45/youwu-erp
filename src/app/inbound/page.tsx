@@ -224,7 +224,11 @@ function InboundOrderCard({ po, chain }: { po: PurchaseOrder; chain: InboundChai
           </p>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-sm font-semibold text-[#171717] tabular-nums">NT${money(po.grand_total)}</p>
+          {/* 技術債修復 2026-09-04：原用 po.grand_total 配 NT$ 前綴——grand_total 存的是 CNY 原值
+              （見 PurchaseOrderFormSheet.tsx 頂部註解，歷史單皆同），配 NT$ 前綴會讓使用者把人民幣
+              金額誤讀成台幣。改讀 total_payment_ntd（真正換算後的 NTD，全部現存單皆已填值，
+              已用 Supabase REST 唯讀抽樣核對）。 */}
+          <p className="text-sm font-semibold text-[#171717] tabular-nums">NT${money(po.total_payment_ntd)}</p>
           {po.status_abnormal != null && po.status_abnormal > 0 && (
             <p className="text-[11px] text-[#E00] mt-0.5">{po.status_abnormal} 項異常</p>
           )}

@@ -214,7 +214,10 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
               <div>
                 <p className="text-sm font-semibold text-[#171717]">下單</p>
                 <p className="text-xs text-[#8F8F8F] mt-0.5">
-                  {items.length} 個品項 · ¥{totalCnySubtotal.toFixed(2)} → NT${money(po.grand_total)}
+                  {/* 技術債修復 2026-09-04：原用 po.grand_total 配 NT$ 前綴——grand_total 存的是
+                      CNY 原值（歷史單皆同），跟前面的 ¥ 小計其實是同一個數字，配 NT$ 只會誤導成
+                      已換算金額。改讀 total_payment_ntd，讓「CNY 小計 → 換算 NTD」的箭頭真的成立。 */}
+                  {items.length} 個品項 · ¥{totalCnySubtotal.toFixed(2)} → NT${money(po.total_payment_ntd)}
                 </p>
               </div>
               {po.status_draft && (
