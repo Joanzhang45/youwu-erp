@@ -1,19 +1,14 @@
 import { createClient, SupabaseClient, Session } from '@supabase/supabase-js'
 
-// Runtime 模式（M7，Joan 2026-07-14 二次拍板）：完全移除登入體驗，AuthProvider 背景自動
-// 用彣錩帳號登入（見 src/lib/AuthContext.tsx），不再有「未登入訪客」這個狀態——任何人開站
-// 都會被自動登入成同一組帳號。RLS policy `authenticated_whitelist`（migration 009）維持
-// Joan＋彣錩雙 uid 白名單不變、後端零動；auto-login 帳密會進公開 bundle 是 Joan 已知情
-// 接受的代價（見 AuthContext.tsx 開頭安全性備忘），不是這裡的疏漏。
+// Runtime 模式（2026-10-21 改回正常登入）：前端不含任何帳密，未登入導 /login（見
+// src/lib/AuthContext.tsx、src/components/app/RequireAuth.tsx）。RLS policy
+// `authenticated_whitelist`（migration 009，Joan＋彣錩雙 uid）才是資料防線。
 //
-// persistSession/autoRefreshToken 明確寫死 true（雖然是 supabase-js v2 預設值，這裡不依賴
-// 隱含預設）：session 存 localStorage 長期有效、token 到期前背景自動續期，加上 auto-login
-// 保底，實際效果是「開站永遠是登入態」。detectSessionInUrl 保持預設 true（OAuth/magic link
-// 用得到，email+password 流程不受影響）。
+// persistSession/autoRefreshToken 明確寫死 true（雖是 supabase-js v2 預設值，不依賴隱含預設）：
+// session 存 localStorage（storage key 維持預設，既有登入態沿用）、token 到期前背景自動續期，
+// 登一次長期有效。detectSessionInUrl 保持預設 true。
 //
-// signOutUser 保留給日後手動除錯用（目前站內沒有任何地方呼叫）：M7 拿掉的是登出「按鈕」，
-// 不是這個工具函式本身——登出後 AuthProvider 下一次 mount 會自動重新登入，UI 層面留登出
-// 入口沒有意義，但保留函式方便必要時用瀏覽器 console 手動呼叫排查。
+// signOutUser 目前站內無按鈕呼叫，保留供除錯／日後加登出入口。
 
 let _client: SupabaseClient | null = null
 
