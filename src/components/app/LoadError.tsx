@@ -16,7 +16,8 @@ export function LoadError({ message, onRetry }: { message: string; onRetry: () =
 
 export function friendlyLoadError(message: string): string {
   if (/failed to fetch|network|load failed/i.test(message)) return "網路連不上，請確認手機有網路後再試一次";
-  if (/jwt|token|auth|401|permission denied/i.test(message)) return "登入可能過期了，重新整理頁面或重新登入後再試";
+  if (/jwt|token|401/i.test(message)) return "登入可能過期了，重新整理頁面或重新登入後再試";
+  if (/permission denied|row-level security|42501/i.test(message)) return "這個帳號沒有權限讀這些資料";
   return message || "原因不明";
 }
 

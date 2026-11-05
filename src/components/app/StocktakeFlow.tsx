@@ -135,7 +135,9 @@ export function StocktakeFlow({ category }: { category: string }) {
                 ? { ...item, actual_qty: saved.actual_qty, touched: true, seen_qty: saved.seen_qty ?? item.expected_qty }
                 : item;
             });
-            restoredIndex = Math.max(0, Math.min(draft.currentIndex, mapped.length - 1));
+            // 回到第一個還沒點過的商品（分類增減商品後，舊的位置可能跳過沒點的）
+            const firstUntouched = mapped.findIndex((m) => !m.touched);
+            restoredIndex = firstUntouched === -1 ? mapped.length - 1 : firstUntouched;
           }
         }
       } catch {
@@ -209,9 +211,16 @@ export function StocktakeFlow({ category }: { category: string }) {
         })),
       });
       if (error) throw error;
-      const diffCount = Number((data as { diff_count?: number } | null)?.diff_count) || 0;
+      const result = (data || {}) as { diff_count?: number; already_submitted?: boolean };
+      const diffCount = Number(result.diff_count) || 0;
       clearDraft();
-      toast(diffCount > 0 ? `盤點完成！${diffCount} 項差異已更新庫存` : "盤點完成！全數與帳上一致");
+      toast(
+        result.already_submitted
+          ? "這次盤點剛才已經送出成功了，沒有重複記；之後改的數字沒有存，需要的話再盤一次"
+          : diffCount > 0
+          ? `盤點完成！${diffCount} 項差異已更新庫存`
+          : "盤點完成！全數與帳上一致"
+      );
       setPhase("done");
       setTimeout(() => router.push("/stock"), 900);
     } catch (e) {

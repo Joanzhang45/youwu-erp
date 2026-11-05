@@ -90,7 +90,8 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
         supabase.from("purchase_orders").select("*").eq("id", poId).single(),
         supabase.from("purchase_order_items").select("*").eq("po_id", poId).order("created_at"),
       ]);
-      if (poRes.error || !poRes.data) {
+      if (poRes.error && poRes.error.code !== "PGRST116") throw poRes.error;
+      if (!poRes.data) {
         setNotFound(true);
         return;
       }
@@ -138,7 +139,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
     if (!po) return;
     const ok = await confirm({
       title: "取消這張採購單？",
-      message: "取消後會移到進貨的歷史區，不能再修改或排集運。已經排進集運的貨不受影響。",
+      message: "取消後會移到進貨的歷史區，不能再修改或排集運。",
       confirmText: "取消採購單",
       danger: true,
     });

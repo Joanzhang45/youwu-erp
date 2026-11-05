@@ -296,8 +296,9 @@ function MappingTool() {
       let query = getSupabase()
         .from("sales_order_items")
         .update({ product_id: productId })
-        .eq("product_name", combo.product_name)
         .is("product_id", null);
+      // 畫面上的「（未命名）」代表品名是空的，實際比對要用空值
+      query = combo.product_name === "（未命名）" ? query.is("product_name", null) : query.eq("product_name", combo.product_name);
       query = combo.variant_name ? query.eq("variant_name", combo.variant_name) : query.or("variant_name.is.null,variant_name.eq.");
       const { data, error } = await query.select("id");
       if (error) throw error;
