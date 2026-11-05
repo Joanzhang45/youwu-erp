@@ -57,10 +57,12 @@ export default function TodayPage() {
 function TodayPageContent() {
   const [data, setData] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const supabase = getSupabase();
       const [shipRes, stockRes, monthRes, snapshotRes, ledgerRes] = await Promise.all([
         supabase
@@ -82,6 +84,10 @@ function TodayPageContent() {
         supabase.from("stock_snapshots").select("snapshot_date").order("snapshot_date", { ascending: false }).limit(1),
         supabase.from("inventory_ledger").select("id, product_id, movement_type, qty_delta, note, occurred_at").order("occurred_at", { ascending: false }).limit(5),
       ]);
+
+      // 任何一個查詢失敗都要讓人看到，不能當成「沒資料」顯示全 0、今天沒有待辦（2026-11-05 健檢 #9）
+      const failed = [shipRes, stockRes, monthRes, snapshotRes, ledgerRes].find((r) => r.error);
+      if (failed?.error) throw failed.error;
 
       // 排除停售/測品/季節款等非在售品項，只計「需要行動」的常駐/主力款缺貨與低庫存
       // （2026-07-16：93 項缺貨含 16+ 項雜訊，彣錩/Joan 反映警示數字失真）
@@ -151,14 +157,10 @@ function TodayPageContent() {
         },
         recent,
       });
-    } catch {
-      setData({
-        arrived: [],
-        inTransitCount: 0,
-        lastStocktakeDays: null,
-        kpi: { monthRevenue: 0, monthOrders: 0, monthGrossProfit: 0, monthNetProfit: 0, outOfStock: 0, lowStock: 0 },
-        recent: [],
-      });
+    } catch (e) {
+      const msg = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
+      setData(null);
+      setLoadError(msg || "讀取失敗");
     } finally {
       setLoading(false);
     }
@@ -188,6 +190,14 @@ function TodayPageContent() {
       <main className="px-5 max-w-2xl mx-auto pb-8">
         {loading ? (
           <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+        ) : loadError ? (
+          <div className="rounded-2xl border border-[#FFD6D6] bg-[#FFF5F5] p-5 text-center">
+            <p className="text-sm font-medium text-[#C00]">資料沒有讀到，畫面上的數字可能不準</p>
+            <p className="text-xs text-[#8F8F8F] mt-1 break-all">{loadError}</p>
+            <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg bg-[#171717] text-white text-sm font-medium">
+              重新讀取
+            </button>
+          </div>
         ) : (
           <div className="space-y-3 app-fade-up-enter">
             {/* 待點收任務卡 */}

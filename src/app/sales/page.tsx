@@ -5,37 +5,20 @@
 // 千分位口徑修正（PRD §5 明點：舊頁「有日期篩選時抓全庫、沒篩選時只算當頁 50 筆」兩套算法
 // 混用，同一顆「總營收」數字含義因篩選狀態而變——這裡統一成「永遠對目前搜尋／狀態篩選出的
 // 全量做聚合」，不看分頁位置）。訂單識別以「商品名＋日期＋金額」為主，蝦皮訂單編號降為
-// metadata（PRD S3：機器識別符當人類介面）。CSV 匯入邏輯原樣搬移，入口降級收進工具區。
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// metadata（PRD S3：機器識別符當人類介面）。蝦皮訂單只走每月匯入腳本（scripts/import-shopee-monthly.py）；網頁版 CSV 匯入 2026-11-05 移除：
+// 它不寫品項（不扣庫存、成本算 0）、多品項訂單整批失敗，之後腳本也補不回品項。
+import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import type { SalesOrder, SalesOrderItem } from "@/lib/database.types";
 import { RequireAuth } from "@/components/app/RequireAuth";
-import { ChevronRightIcon, SearchIcon } from "@/components/app/icons";
+import { CANCELLED_STATUS, fetchAllRows, itemUnitCost } from "@/lib/fetchAll";
+import { SearchIcon } from "@/components/app/icons";
 
 const PAGE_SIZE = 20;
 
 function money(n: number | null | undefined): string {
   return Math.round(Number(n) || 0).toLocaleString();
-}
-
-// 分批抓全量：本專案 Supabase db-max-rows=1000，829+ 筆訂單目前在門檻內，但這是會長大的
-// 資料（PRD 硬約束），統計卡聚合一律走 range() 迴圈補齊，不因為「現在還沒破千」就走捷徑。
-async function fetchAllRows<T>(
-  makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
-  pageSize = 1000
-): Promise<T[]> {
-  const all: T[] = [];
-  let offset = 0;
-  for (;;) {
-    const { data, error } = await makeQuery(offset, offset + pageSize - 1);
-    if (error) throw new Error(error.message);
-    const rows = data || [];
-    all.push(...rows);
-    if (rows.length < pageSize) break;
-    offset += pageSize;
-  }
-  return all;
 }
 
 type SummaryStats = { totalRevenue: number; totalNet: number; totalFees: number; totalCOGS: number; totalProfit: number; count: number };
@@ -80,7 +63,6 @@ function SalesPageContent() {
   const [summaryLoading, setSummaryLoading] = useState(false);
 
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [toolsOpen, setToolsOpen] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -91,9 +73,7 @@ function SalesPageContent() {
   useEffect(() => {
     (async () => {
       try {
-        const rows = await fetchAllRows<{ status: string | null }>((from, to) =>
-          getSupabase().from("sales_orders").select("status").range(from, to)
-        );
+        const rows = await fetchAllRows<{ status: string | null }>(() => getSupabase().from("sales_orders").select("status"));
         setStatusOptions(Array.from(new Set(rows.map((r) => r.status).filter((s): s is string => !!s))).sort());
       } catch {
         setStatusOptions([]);
@@ -124,7 +104,7 @@ function SalesPageContent() {
           const ids = rows.map((o) => o.id);
           const { data: items } = await supabase
             .from("sales_order_items")
-            .select("id, order_id, product_id, product_name, variant_name, qty, unit_price, subtotal")
+            .select("id, order_id, product_id, product_name, variant_name, qty, unit_price, subtotal, unit_cost_at_sale")
             .in("order_id", ids);
           const itemsMap: Record<number, SalesOrderItem[]> = {};
           (items || []).forEach((it) => {
@@ -141,10 +121,11 @@ function SalesPageContent() {
               costMap[p.id] = Number(p.unit_cost_ntd) || 0;
             });
           }
+          const orderStatus: Record<number, string | null> = Object.fromEntries(rows.map((o) => [o.id, o.status]));
           const cogsMap: Record<number, number> = {};
           (items || []).forEach((it) => {
             if (!it.order_id) return;
-            const cost = it.product_id ? costMap[it.product_id] || 0 : 0;
+            const cost = it.order_id && orderStatus[it.order_id] === CANCELLED_STATUS ? 0 : itemUnitCost(it, costMap);
             cogsMap[it.order_id] = (cogsMap[it.order_id] || 0) + cost * (Number(it.qty) || 1);
           });
           setCostByOrder((prev) => (reset ? cogsMap : { ...prev, ...cogsMap }));
@@ -172,9 +153,11 @@ function SalesPageContent() {
     setSummaryLoading(true);
     try {
       const supabase = getSupabase();
-      const rows = await fetchAllRows<Pick<SalesOrder, "id" | "order_amount" | "net_revenue">>((from, to) =>
-        withOrderFilters(supabase.from("sales_orders").select("id, order_amount, net_revenue"), search, status).range(from, to)
-      );
+      // 「全部」不含「不成立」：與今天、分析頁的資料庫報表同一口徑（作廢單不算營收也不算成本）。
+      const rows = await fetchAllRows<Pick<SalesOrder, "id" | "order_amount" | "net_revenue">>(() => {
+        const q = withOrderFilters(supabase.from("sales_orders").select("id, order_amount, net_revenue"), search, status);
+        return status === "全部" ? q.neq("status", CANCELLED_STATUS) : q;
+      });
       const totalRevenue = rows.reduce((s, o) => s + (Number(o.order_amount) || 0), 0);
       const totalNet = rows.reduce((s, o) => s + (Number(o.net_revenue) || 0), 0);
 
@@ -182,14 +165,17 @@ function SalesPageContent() {
       const ids = rows.map((o) => o.id);
       for (let i = 0; i < ids.length; i += 300) {
         const chunk = ids.slice(i, i + 300);
-        const items = await fetchAllRows<{ product_id: number | null; qty: number | null }>((from, to) =>
-          supabase.from("sales_order_items").select("product_id, qty").in("order_id", chunk).range(from, to)
+        const items = await fetchAllRows<{ product_id: number | null; qty: number | null; unit_cost_at_sale: number | null }>(() =>
+          supabase.from("sales_order_items").select("product_id, qty, unit_cost_at_sale").in("order_id", chunk)
         );
-        const productIds = [...new Set(items.map((it) => it.product_id).filter((v): v is number => v != null))];
-        if (productIds.length === 0) continue;
-        const { data: prods } = await supabase.from("products").select("id, unit_cost_ntd").in("id", productIds);
-        const costMap = new Map((prods || []).map((p) => [p.id, Number(p.unit_cost_ntd) || 0]));
-        totalCOGS += items.reduce((s, it) => s + (it.product_id ? costMap.get(it.product_id) || 0 : 0) * (Number(it.qty) || 1), 0);
+        const missing = [...new Set(items.filter((it) => it.unit_cost_at_sale == null && it.product_id != null).map((it) => it.product_id as number))];
+        const costMap = new Map<number, number>();
+        if (missing.length > 0) {
+          const { data: prods, error: prodErr } = await supabase.from("products").select("id, unit_cost_ntd").in("id", missing);
+          if (prodErr) throw prodErr;
+          (prods || []).forEach((p) => costMap.set(p.id, Number(p.unit_cost_ntd) || 0));
+        }
+        totalCOGS += items.reduce((s, it) => s + itemUnitCost(it, costMap) * (Number(it.qty) || 1), 0);
       }
 
       setSummary({ totalRevenue, totalNet, totalFees: totalRevenue - totalNet, totalCOGS, totalProfit: totalNet - totalCOGS, count: rows.length });
@@ -302,14 +288,7 @@ function SalesPageContent() {
           </div>
         )}
 
-        {/* 工具區：CSV 匯入（原 /orders 頁一級功能降級） */}
-        <div className="pt-4">
-          <button onClick={() => setToolsOpen((v) => !v)} className="w-full flex items-center justify-between py-2.5 text-sm text-[#8F8F8F]">
-            <span>工具：CSV 匯入蝦皮訂單</span>
-            <ChevronRightIcon className={`w-4 h-4 transition-transform duration-150 ${toolsOpen ? "rotate-90" : ""}`} />
-          </button>
-          {toolsOpen && <ImportTool onImported={() => loadPage(true)} />}
-        </div>
+        <p className="pt-6 text-xs text-[#8F8F8F] text-center">蝦皮訂單每月由系統自動匯入，不需要在這裡手動匯入。</p>
       </main>
     </div>
   );
@@ -408,169 +387,6 @@ function FeeLine({ label, value, highlight }: { label: string; value: number; hi
       <span style={highlight ? { color: highlight } : undefined} className={!highlight ? (value < 0 ? "text-[#E00]" : "text-[#171717]") : ""}>
         {value < 0 ? "-" : ""}${money(Math.abs(value))}
       </span>
-    </div>
-  );
-}
-
-function parseShopeeCSV(text: string): Partial<SalesOrder>[] {
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  if (lines.length < 2) return [];
-
-  const headers = lines[0].split(",").map((h) => h.replace(/"/g, "").trim());
-  const findCol = (keywords: string[]) => headers.findIndex((h) => keywords.some((k) => h.includes(k)));
-
-  const colOrderNo = findCol(["訂單編號", "Order ID", "order_sn"]);
-  const colDate = findCol(["訂單成立日期", "Order Creation Date", "create_time"]);
-  const colBuyer = findCol(["買家帳號", "Buyer Username", "buyer"]);
-  const colAmount = findCol(["訂單金額", "Order Total Amount", "total_amount"]);
-  const colStatus = findCol(["訂單狀態", "Order Status", "status"]);
-  const colTransactionFee = findCol(["成交手續費", "Transaction Fee"]);
-  const colServiceFee = findCol(["服務費", "Service Fee", "活動服務費"]);
-  const colPaymentFee = findCol(["金流服務費", "Payment Fee", "金流費"]);
-  const colShippingSubsidy = findCol(["免運補助", "Shipping Subsidy"]);
-  const colSellerCoupon = findCol(["賣家優惠券", "Seller Voucher"]);
-  const colPlatformCoupon = findCol(["蝦皮優惠券", "Shopee Voucher", "平台優惠券"]);
-
-  const results: Partial<SalesOrder>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    for (const char of lines[i]) {
-      if (char === '"') inQuotes = !inQuotes;
-      else if (char === "," && !inQuotes) {
-        values.push(current.trim());
-        current = "";
-      } else current += char;
-    }
-    values.push(current.trim());
-
-    const getVal = (idx: number) => (idx >= 0 && idx < values.length ? values[idx] : "");
-    const getNum = (idx: number) => {
-      const v = getVal(idx).replace(/[,$]/g, "");
-      return v ? Number(v) : null;
-    };
-
-    const orderNo = getVal(colOrderNo);
-    if (!orderNo) continue;
-
-    results.push({
-      order_number: orderNo,
-      order_date: getVal(colDate) || null,
-      buyer_name: getVal(colBuyer) || null,
-      order_amount: getNum(colAmount),
-      status: getVal(colStatus) || null,
-      transaction_fee: getNum(colTransactionFee),
-      payment_processing_fee: getNum(colPaymentFee),
-      free_shipping_subsidy: getNum(colShippingSubsidy),
-      seller_coupon: getNum(colSellerCoupon),
-      platform_coupon: getNum(colPlatformCoupon),
-      extended_prep_fee: getNum(colServiceFee),
-    });
-  }
-
-  return results.map((o) => ({
-    ...o,
-    net_revenue:
-      (o.order_amount || 0) -
-      Math.abs(o.transaction_fee || 0) -
-      Math.abs(o.payment_processing_fee || 0) -
-      Math.abs(o.extended_prep_fee || 0) -
-      Math.abs(o.seller_coupon || 0) -
-      Math.abs(o.platform_coupon || 0),
-  }));
-}
-
-function ImportTool({ onImported }: { onImported: () => void }) {
-  const { toast } = useToast();
-  const [importing, setImporting] = useState(false);
-  const [preview, setPreview] = useState<Partial<SalesOrder>[] | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const parsed = parseShopeeCSV(text);
-      if (parsed.length === 0) {
-        toast("無法解析 CSV，請確認格式是否正確", "error");
-        return;
-      }
-      setPreview(parsed);
-    } catch {
-      toast("讀取檔案失敗", "error");
-    }
-  };
-
-  const confirmImport = async () => {
-    if (!preview) return;
-    setImporting(true);
-    try {
-      const previewNums = preview.map((o) => o.order_number).filter(Boolean) as string[];
-      const { data: existingData } = await getSupabase().from("sales_orders").select("order_number").in("order_number", previewNums);
-      const existingNums = new Set((existingData || []).map((o) => o.order_number));
-      const newOrders = preview.filter((o) => !existingNums.has(o.order_number || ""));
-
-      if (newOrders.length === 0) {
-        toast(`${preview.length} 筆訂單全部已存在，無需匯入`, "info");
-        setPreview(null);
-        return;
-      }
-
-      const { error } = await getSupabase().from("sales_orders").insert(newOrders);
-      if (error) throw error;
-
-      toast(`成功匯入 ${newOrders.length} 筆新訂單（跳過 ${preview.length - newOrders.length} 筆重複）`);
-      setPreview(null);
-      onImported();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "匯入失敗", "error");
-    } finally {
-      setImporting(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  };
-
-  return (
-    <div className="mt-2 app-fade-up-enter space-y-3">
-      <label className="block w-full py-3 rounded-xl bg-[#FAFAFA] text-[#171717] text-sm font-medium border border-dashed border-[#EAEAEA] text-center cursor-pointer hover:border-[#171717] transition-colors duration-150">
-        {importing ? "匯入中..." : "點擊選擇蝦皮訂單 CSV"}
-        <input ref={fileRef} type="file" accept=".csv" onChange={handleFileSelect} className="hidden" disabled={importing} />
-      </label>
-
-      {preview && (
-        <div className="rounded-xl border border-[#EAEAEA] p-3">
-          <p className="text-sm font-medium text-[#171717] mb-2">預覽：解析到 {preview.length} 筆訂單</p>
-          <div className="max-h-40 overflow-y-auto space-y-1 mb-3">
-            {preview.slice(0, 20).map((o, i) => (
-              <div key={i} className="flex justify-between items-center text-xs bg-[#FAFAFA] rounded-lg px-2.5 py-1.5">
-                <span className="font-mono">{o.order_number}</span>
-                <span className="font-medium">${money(o.order_amount)}</span>
-              </div>
-            ))}
-            {preview.length > 20 && <div className="text-center text-[11px] text-[#8F8F8F] py-1">...還有 {preview.length - 20} 筆</div>}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={confirmImport}
-              disabled={importing}
-              className="flex-1 py-2 rounded-lg bg-[#171717] text-white text-sm font-medium disabled:opacity-50"
-            >
-              {importing ? "匯入中..." : `確認匯入 ${preview.length} 筆`}
-            </button>
-            <button
-              onClick={() => {
-                setPreview(null);
-                if (fileRef.current) fileRef.current.value = "";
-              }}
-              className="flex-1 py-2 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] text-[#666666] text-sm font-medium"
-            >
-              取消
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

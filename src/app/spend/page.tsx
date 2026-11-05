@@ -6,6 +6,7 @@
 // 列入 S3/S4 病灶，匯入本來就是這頁唯二的新增手段之一，沒有理由藏起來）。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import { fetchAllRows } from "@/lib/fetchAll";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import type { AdCost, OperatingExpense } from "@/lib/database.types";
@@ -18,23 +19,6 @@ const PAGE_SIZE = 20;
 
 function money(n: number | null | undefined): string {
   return Math.round(Number(n) || 0).toLocaleString();
-}
-
-async function fetchAllRows<T>(
-  makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
-  pageSize = 1000
-): Promise<T[]> {
-  const all: T[] = [];
-  let offset = 0;
-  for (;;) {
-    const { data, error } = await makeQuery(offset, offset + pageSize - 1);
-    if (error) throw new Error(error.message);
-    const rows = data || [];
-    all.push(...rows);
-    if (rows.length < pageSize) break;
-    offset += pageSize;
-  }
-  return all;
 }
 
 function parseAdsCSV(text: string): Partial<AdCost>[] {
@@ -123,7 +107,7 @@ function SpendPageContent() {
         setAdsTotal(count ?? 0);
         setAdsHasMore(rows.length === PAGE_SIZE);
         if (reset) {
-          const all = await fetchAllRows<{ amount: number | null }>((f, t) => supabase.from("ad_costs").select("amount").range(f, t));
+          const all = await fetchAllRows<{ amount: number | null }>(() => supabase.from("ad_costs").select("amount"));
           setAdsSum(all.reduce((s, a) => s + (Number(a.amount) || 0), 0));
         }
       } catch (e) {
@@ -154,7 +138,7 @@ function SpendPageContent() {
         setExpTotal(count ?? 0);
         setExpHasMore(rows.length === PAGE_SIZE);
         if (reset) {
-          const all = await fetchAllRows<{ amount: number | null }>((f, t) => supabase.from("operating_expenses").select("amount").range(f, t));
+          const all = await fetchAllRows<{ amount: number | null }>(() => supabase.from("operating_expenses").select("amount"));
           setExpSum(all.reduce((s, e) => s + (Number(e.amount) || 0), 0));
         }
       } catch (e) {
@@ -184,9 +168,40 @@ function SpendPageContent() {
         toast("無法解析 CSV", "error");
         return;
       }
-      const { error } = await getSupabase().from("ad_costs").insert(parsed);
-      if (error) throw error;
-      toast(`成功匯入 ${parsed.length} 筆廣告數據`);
+      // 同一份報表匯兩次不能算兩次：跳過「日期＋金額＋名稱」已存在的列（資料庫另有唯一索引當最後防線）。
+      const valid = parsed.filter((r) => r.ad_date && /^\d{4}-\d{2}-\d{2}$/.test(String(r.ad_date)));
+      const badDate = parsed.length - valid.length;
+      if (valid.length === 0) {
+        toast("CSV 裡找不到可用的日期（需為 YYYY-MM-DD）", "error");
+        return;
+      }
+      const dates = valid.map((r) => String(r.ad_date)).sort();
+      const supabase = getSupabase();
+      const { data: existing, error: exErr } = await supabase
+        .from("ad_costs")
+        .select("ad_date, amount, description")
+        .gte("ad_date", dates[0])
+        .lte("ad_date", dates[dates.length - 1]);
+      if (exErr) throw exErr;
+      const key = (r: { ad_date?: string | null; amount?: number | string | null; description?: string | null }) =>
+        `${r.ad_date}|${Number(r.amount)}|${r.description ?? ""}`;
+      const seen = new Set((existing || []).map(key));
+      const fresh = valid.filter((r) => {
+        const k = key(r);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      if (fresh.length > 0) {
+        const { error } = await supabase.from("ad_costs").insert(fresh);
+        if (error) throw error;
+      }
+      const skipped = valid.length - fresh.length;
+      toast(
+        `匯入 ${fresh.length} 筆廣告費` +
+          (skipped ? `，跳過 ${skipped} 筆已存在` : "") +
+          (badDate ? `，${badDate} 筆日期無法辨識未匯入` : "")
+      );
       loadAds(true);
     } catch (e) {
       toast(e instanceof Error ? e.message : "匯入失敗", "error");

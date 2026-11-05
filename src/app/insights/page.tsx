@@ -7,6 +7,7 @@
 // PRD 明確要「本月 Top10/Bottom10」，所以這裡把 qty 改成從當期 order_items 即時加總）。
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import { fetchAllRows } from "@/lib/fetchAll";
 import { useToast } from "@/components/Toast";
 import type { MonthlyProfitability, Product } from "@/lib/database.types";
 import { RequireAuth } from "@/components/app/RequireAuth";
@@ -27,25 +28,6 @@ type RankedProduct = {
   totalProfit: number;
   margin: number;
 };
-
-// 分頁抓全量：本專案 Supabase db-max-rows=1000，單次 select 對 >1000 列的表會被
-// 伺服器靜默截斷（見 fetchData 內註解），這支 helper 用 .range() 迴圈補齊。
-async function fetchAllRows<T>(
-  makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
-  pageSize = 1000
-): Promise<T[]> {
-  const all: T[] = [];
-  let offset = 0;
-  for (;;) {
-    const { data, error } = await makeQuery(offset, offset + pageSize - 1);
-    if (error) throw new Error(error.message);
-    const rows = data || [];
-    all.push(...rows);
-    if (rows.length < pageSize) break;
-    offset += pageSize;
-  }
-  return all;
-}
 
 // v_monthly_profitability 的金額欄位是 numeric 除法算出來的浮點數（例：2637.7097），
 // 直接 .toLocaleString() 預設最多顯示 3 位小數會噴出「$2,637.71」這種雜訊——2026-07-12
@@ -83,8 +65,8 @@ function getPeriodRange(period: Period, customFrom: string, customTo: string): {
   return null;
 }
 
-// 與舊 analytics 頁同公式（該檔 line 167：fees = revenue * (feeRate/100)），沿用不修正——
-// platform_fee_rate 的儲存單位（百分比數字 vs 小數）不在本次任務範圍內判定對錯。
+// platform_fee_rate 存百分比數字（12.9 = 12.9%，訂單級實測口徑）。2026-11-05 migration 012
+// 把混存的 0.145／14.5 統一成 12.9，並加 CHECK 限制在 1~100，所以這裡固定除以 100。
 function buildRanked(p: Product, periodQty: number): RankedProduct {
   const revenue = Number(p.selling_price) || 0;
   const cost = Number(p.unit_cost_ntd) || 0;
@@ -154,11 +136,11 @@ function InsightsPageContent() {
       // 決定、不保證含最新列——這正是「本月排行榜」一度全空的根因：本月訂單剛好落在
       // 被截掉的那段。分頁抓好全量再篩期間，不能只加大 limit。
       const [ordersData, itemsData] = await Promise.all([
-        fetchAllRows<OrderRow>((from, to) =>
-          supabase.from("sales_orders").select("id, order_date, status").not("order_date", "is", null).range(from, to)
+        fetchAllRows<OrderRow>(() =>
+          supabase.from("sales_orders").select("id, order_date, status").not("order_date", "is", null)
         ),
-        fetchAllRows<ItemRow>((from, to) =>
-          supabase.from("sales_order_items").select("order_id, product_id, qty").range(from, to)
+        fetchAllRows<ItemRow>(() =>
+          supabase.from("sales_order_items").select("order_id, product_id, qty")
         ),
       ]);
       setOrders(ordersData);

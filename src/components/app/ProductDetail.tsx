@@ -72,9 +72,20 @@ export function ProductDetail({ id }: { id: number }) {
 
   const handleSave = async () => {
     if (!form || !product) return;
+    // 只寫有改過的欄位：整張表單回寫會把別人（例如點收）剛更新的成本蓋回開頁時的舊值。
+    const original = toEditForm(product);
+    const changed = Object.fromEntries(
+      (Object.keys(form) as (keyof EditForm)[])
+        .filter((k) => form[k] !== original[k])
+        .map((k) => [k, form[k]])
+    ) as Partial<EditForm>;
+    if (Object.keys(changed).length === 0) {
+      toast("沒有變更");
+      return;
+    }
     setSaving(true);
     try {
-      const { error } = await getSupabase().from("products").update(form).eq("id", product.id);
+      const { error } = await getSupabase().from("products").update(changed).eq("id", product.id);
       if (error) throw error;
       toast("已儲存");
       fetchProduct();

@@ -1,12 +1,11 @@
 "use client";
 
-// 到貨點收核心流程（PRD §4.2）。取代舊版 src/app/purchase/receiving/page.tsx 的介面，
-// 落地成本公式與寫入順序完全沿用該檔（見 src/lib/landedCost.ts 開頭註解），舊檔本身不動。
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// 到貨點收核心流程（PRD §4.2）。畫面在這裡；寫入與落地成本公式在資料庫函式 receive_shipment
+// （supabase/migrations/012_cost_snapshot_and_atomic_flows.sql）。
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
-import { calcLandedCost } from "@/lib/landedCost";
 import type { ConsolidatedShipment } from "@/lib/database.types";
 import { CameraIcon, CheckIcon } from "./icons";
 
@@ -26,7 +25,7 @@ type FlowItem = {
   weight_kg: number | null;
 };
 
-type Phase = "loading" | "items" | "summary" | "submitting" | "done" | "error";
+type Phase = "loading" | "items" | "summary" | "submitting" | "done" | "error" | "received";
 
 type Draft = {
   shipmentId: number;
@@ -34,8 +33,13 @@ type Draft = {
   items: { id: number; actual_qty: number; condition: Condition; notes: string }[];
 };
 
-const CNY_RATE_DEFAULT = 4.6;
-const CARD_FEE_RATE_DEFAULT = 1.5;
+function receiveErrorText(e: unknown): string {
+  const msg = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
+  if (msg.includes("ALREADY_RECEIVED")) return "這批貨已經點收過了，不能重複點收";
+  if (msg.includes("MISSING_WEIGHT")) return "這張集運單沒有填總重，運費沒辦法分攤，請先補上總重";
+  if (msg.includes("MISSING_COST")) return "這張集運單沒有填總運費，請先補上";
+  return msg || "點收失敗，資料沒有寫入，可以再試一次";
+}
 
 function draftKey(shipmentId: number) {
   return `youwu_receive_draft_${shipmentId}`;
@@ -49,8 +53,6 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
   const [shipment, setShipment] = useState<ConsolidatedShipment | null>(null);
   const [items, setItems] = useState<FlowItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const cnyRateRef = useRef(CNY_RATE_DEFAULT);
-  const cardFeeRateRef = useRef(CARD_FEE_RATE_DEFAULT);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const persistDraft = useCallback(
@@ -81,21 +83,17 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
     setPhase("loading");
     try {
       const supabase = getSupabase();
-      const [shipRes, itemsRes, poRes] = await Promise.all([
+      const [shipRes, itemsRes] = await Promise.all([
         supabase.from("consolidated_shipments").select("*").eq("id", shipmentId).single(),
         supabase.from("consolidated_shipment_items").select("*").eq("shipment_id", shipmentId),
-        supabase
-          .from("purchase_orders")
-          .select("cny_rate")
-          .not("cny_rate", "is", null)
-          .order("created_at", { ascending: false })
-          .limit(1),
       ]);
       if (shipRes.error) throw shipRes.error;
       if (itemsRes.error) throw itemsRes.error;
       const shipData: ConsolidatedShipment = shipRes.data;
-      if (poRes.data && poRes.data.length > 0 && poRes.data[0].cny_rate) {
-        cnyRateRef.current = Number(poRes.data[0].cny_rate);
+      if (shipData.status === "已驗收" || shipData.status === "已入庫") {
+        setShipment(shipData);
+        setPhase("received");
+        return;
       }
 
       const productIds = (itemsRes.data || []).map((i) => i.product_id).filter(Boolean) as number[];
@@ -195,120 +193,45 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
 
   const diffCount = useMemo(() => items.filter((i) => i.actual_qty !== i.expected_qty).length, [items]);
 
+  // 整批點收交給資料庫函式 receive_shipment（migration 012）在一個交易內完成：點收單、品項、
+  // 庫存帳、成本、集運單狀態要嘛全部寫入、要嘛全部不寫，不再由瀏覽器逐筆寫再手動回滾。
+  // 同一張集運單只能點收一次；總重或總運費沒填會被擋下。
   const submitReceiving = async () => {
     if (!shipment) return;
     setPhase("submitting");
-
-    let createdReceivingId: number | null = null;
-    const updatedProductIds: { id: number; prev: { unit_cost_ntd: number | null; latest_po_number: string | null } }[] = [];
-    const createdItemIds: number[] = [];
-    const supabase = getSupabase();
-
     try {
-      const totalShipmentCost = Number(shipment.total_cost_ntd) || 0;
-      const totalWeight = Number(shipment.total_weight_kg) || 1;
-
-      const receivingNumber = `RV-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-${String(Math.floor(Math.random() * 999) + 1).padStart(3, "0")}`;
-      const { data: rvData, error: rvErr } = await supabase
-        .from("receiving_records")
-        .insert({
-          receiving_number: receivingNumber,
-          shipment_number: shipment.shipment_number,
-          receiving_date: new Date().toISOString().split("T")[0],
-          receiver: "manual",
-        })
-        .select("id")
-        .single();
-      if (rvErr) throw rvErr;
-      createdReceivingId = rvData.id;
-
-      const rvItems = items.map((item) => ({
-        receiving_id: rvData.id,
-        product_id: item.product_id,
-        product_name: item.product_name,
-        variant_name: item.variant_name,
-        expected_qty: item.expected_qty,
-        actual_qty: item.actual_qty,
-        // discrepancy 不可寫：receiving_record_items.discrepancy 是
-        // GENERATED ALWAYS AS (actual_qty - expected_qty) STORED（見
-        // supabase/migrations/001_initial_schema.sql 第 255 行），帶這欄一律 400
-        // code 428C9。tester production 驗收抓到；舊版 purchase/receiving/page.tsx
-        // 同樣帶了這欄（該檔不在本次改動範圍，可能同樣受影響，留給 developer 另外評估）。
-        condition: item.condition,
-        notes: item.notes || null,
-      }));
-      const { data: rvItemData, error: rvItemErr } = await supabase
-        .from("receiving_record_items")
-        .insert(rvItems)
-        .select("id");
-      if (rvItemErr) throw rvItemErr;
-      if (rvItemData) createdItemIds.push(...rvItemData.map((r) => r.id));
-
-      for (const item of items) {
-        if (!item.product_id || item.actual_qty <= 0) continue;
-        const { data: product } = await supabase
-          .from("products")
-          .select("purchase_price_cny, weight_kg, unit_cost_ntd, latest_po_number")
-          .eq("id", item.product_id)
-          .single();
-        if (!product) continue;
-
-        updatedProductIds.push({
-          id: item.product_id,
-          prev: { unit_cost_ntd: product.unit_cost_ntd, latest_po_number: product.latest_po_number },
-        });
-
-        const { landedCostPerUnit } = calcLandedCost({
-          purchasePriceCny: product.purchase_price_cny,
-          itemWeightKg: item.weight_kg ?? product.weight_kg,
-          cnyRate: cnyRateRef.current,
-          cardFeeRatePct: cardFeeRateRef.current,
-          totalShipmentCostNtd: totalShipmentCost,
-          totalShipmentWeightKg: totalWeight,
-        });
-
-        const { error: prodErr } = await supabase
-          .from("products")
-          .update({
-            unit_cost_ntd: Math.round(landedCostPerUnit * 100) / 100,
-            latest_po_number: shipment.shipment_number,
-          })
-          .eq("id", item.product_id);
-        if (prodErr) throw prodErr;
-      }
-
-      await supabase.from("consolidated_shipments").update({ status: "已驗收" }).eq("id", shipmentId);
-
+      const { data, error } = await getSupabase().rpc("receive_shipment", {
+        p_shipment_id: shipmentId,
+        p_items: items.map((i) => ({ id: i.id, actual_qty: i.actual_qty, condition: i.condition, notes: i.notes || "" })),
+      });
+      if (error) throw error;
+      const r = (data || {}) as { unlinked?: number; cost_skipped?: number };
       clearDraft();
-      toast("點收完成！庫存與成本已更新。");
+      const warn: string[] = [];
+      if (r.unlinked) warn.push(`${r.unlinked} 項沒對到商品，庫存沒有增加`);
+      if (r.cost_skipped) warn.push(`${r.cost_skipped} 項缺進價，成本沒有更新`);
+      toast(warn.length ? `點收完成，但 ${warn.join("；")}` : "點收完成！庫存與成本已更新。", warn.length ? "error" : undefined);
       setPhase("done");
-      setTimeout(() => router.push("/today"), 900);
+      setTimeout(() => router.push("/today"), warn.length ? 3000 : 900);
     } catch (e) {
-      toast(e instanceof Error ? e.message : "驗收失敗，正在回滾...", "error");
-      try {
-        for (const { id, prev } of updatedProductIds) {
-          await supabase.from("products").update(prev).eq("id", id);
-        }
-        if (createdItemIds.length > 0) {
-          await supabase
-            .from("inventory_ledger")
-            .delete()
-            .eq("ref_type", "receiving_record_item")
-            .in("ref_no", createdItemIds.map(String));
-        }
-        if (createdReceivingId) {
-          await supabase.from("receiving_record_items").delete().eq("receiving_id", createdReceivingId);
-          await supabase.from("receiving_records").delete().eq("id", createdReceivingId);
-        }
-      } catch {
-        toast("回滾部分失敗，請手動檢查資料", "error");
-      }
+      toast(receiveErrorText(e), "error");
       setPhase("summary");
     }
   };
 
   if (phase === "loading") {
     return <div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>;
+  }
+
+  if (phase === "received") {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 text-center">
+        <div>
+          <p className="text-[#171717] mb-3 text-sm">這批貨已經點收過了</p>
+          <a href="/receive" className="text-[#0070F3] text-sm underline">返回點收清單</a>
+        </div>
+      </div>
+    );
   }
 
   if (phase === "error" || !shipment) {

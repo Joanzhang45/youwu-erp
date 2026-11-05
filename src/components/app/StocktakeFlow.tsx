@@ -5,6 +5,7 @@
 // 一次走完全店 165 項）②無「良好/異常」二選一，改成即時差異標色 ③完成後採 Q7 拍板「直接入帳」
 // （無需二次確認差異是否要接受）。
 //
+// 寫入在資料庫函式 submit_stocktake（migration 012），下面是它寫什麼：
 // 留檔設計（見交付報告）：
 //   - stock_snapshots：每個「有輸入實際數量」的品項各寫一筆（不論有無差異），note 欄直接記
 //     人話「帳上 X → 實際 Y（±diff）」或「與帳上一致」——讓 /stock?records=1 不用回頭 join
@@ -16,7 +17,7 @@
 //     既有 StockAdjustSheet REASONS 已有的 "盤點修正"（不發明新枚舉值）。這是唯一真的會改變
 //     stock_qty 的寫入（stock_qty 是 v_products_with_stock 對 ledger 的聚合，products 表本身
 //     沒有這欄）。
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
@@ -44,11 +45,6 @@ type Draft = {
 
 function draftKey(category: string) {
   return `youwu_stocktake_draft_${category}`;
-}
-
-function todayLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function StocktakeFlow({ category }: { category: string }) {
@@ -87,7 +83,7 @@ export function StocktakeFlow({ category }: { category: string }) {
     setPhase("loading");
     try {
       const supabase = getSupabase();
-      let query = supabase.from("v_products_with_stock").select("*").neq("product_status", "停售").order("product_name");
+      let query = supabase.from("v_products_with_stock").select("*").or("product_status.is.null,product_status.neq.停售").order("product_name");
       query = category === "（未分類）" ? query.is("category", null) : query.eq("category", category);
       const { data, error } = await query;
       if (error) throw error;
@@ -162,55 +158,23 @@ export function StocktakeFlow({ category }: { category: string }) {
 
   const diffItems = useMemo(() => items.filter((i) => i.actual_qty !== i.expected_qty), [items]);
 
+  // 送出交給資料庫函式 submit_stocktake（migration 012）：差異用「送出當下」的帳上數計算，
+  // 盤點途中有人點收或出貨也不會算錯；同一天重盤同一商品會覆蓋當天紀錄；整批一個交易完成。
   const submitStocktake = async () => {
     setPhase("submitting");
-
-    const supabase = getSupabase();
-    let createdSnapshotIds: number[] = [];
-    let createdLedgerIds: number[] = [];
-
     try {
-      const snapshotDate = todayLocal();
-      const snapshotRows = items.map((item) => {
-        const diff = item.actual_qty - item.expected_qty;
-        const note = diff === 0 ? "盤點：與帳上一致" : `盤點差異：帳上 ${item.expected_qty} → 實際 ${item.actual_qty}（${diff > 0 ? "+" : ""}${diff}）`;
-        return { product_id: item.product_id, counted_qty: item.actual_qty, snapshot_date: snapshotDate, note };
+      const { data, error } = await getSupabase().rpc("submit_stocktake", {
+        p_items: items.map((item) => ({ product_id: item.product_id, counted_qty: item.actual_qty })),
       });
-      const { data: snapData, error: snapErr } = await supabase.from("stock_snapshots").insert(snapshotRows).select("id");
-      if (snapErr) throw snapErr;
-      createdSnapshotIds = (snapData || []).map((r) => r.id);
-
-      if (diffItems.length > 0) {
-        const refNo = `ST-${Date.now()}`;
-        const ledgerRows = diffItems.map((item) => ({
-          product_id: item.product_id,
-          movement_type: "manual_adjust",
-          qty_delta: item.actual_qty - item.expected_qty,
-          ref_type: "stocktake_adjust",
-          ref_no: refNo,
-          note: "盤點修正",
-        }));
-        const { data: ledgerData, error: ledgerErr } = await supabase.from("inventory_ledger").insert(ledgerRows).select("id");
-        if (ledgerErr) throw ledgerErr;
-        createdLedgerIds = (ledgerData || []).map((r) => r.id);
-      }
-
+      if (error) throw error;
+      const diffCount = Number((data as { diff_count?: number } | null)?.diff_count) || 0;
       clearDraft();
-      toast(
-        diffItems.length > 0
-          ? `盤點完成！${diffItems.length} 項差異已更新庫存`
-          : "盤點完成！全數與帳上一致"
-      );
+      toast(diffCount > 0 ? `盤點完成！${diffCount} 項差異已更新庫存` : "盤點完成！全數與帳上一致");
       setPhase("done");
       setTimeout(() => router.push("/stock"), 900);
     } catch (e) {
-      toast(e instanceof Error ? e.message : "盤點送出失敗，正在回滾...", "error");
-      try {
-        if (createdLedgerIds.length > 0) await supabase.from("inventory_ledger").delete().in("id", createdLedgerIds);
-        if (createdSnapshotIds.length > 0) await supabase.from("stock_snapshots").delete().in("id", createdSnapshotIds);
-      } catch {
-        toast("回滾部分失敗，請手動檢查資料", "error");
-      }
+      const msg = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
+      toast(msg ? `盤點送出失敗，資料沒有寫入：${msg}` : "盤點送出失敗，資料沒有寫入，可以再試一次", "error");
       setPhase("summary");
     }
   };

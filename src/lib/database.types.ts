@@ -286,6 +286,7 @@ export interface SalesOrderItem {
   qty: number | null
   unit_price: number | null
   subtotal: number | null
+  unit_cost_at_sale?: number | null
 }
 
 export interface AdCost {
