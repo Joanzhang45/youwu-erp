@@ -33,6 +33,8 @@ type FlowItem = {
   expected_qty: number;
   actual_qty: number;
   touched: boolean;
+  // 點這一項時畫面上的帳上數。差異 = 點到的 − 這個數（點完之後才發生的出貨／點收不算進差異）
+  seen_qty: number;
 };
 
 type Phase = "loading" | "items" | "summary" | "submitting" | "done" | "error" | "empty";
@@ -40,7 +42,7 @@ type Phase = "loading" | "items" | "summary" | "submitting" | "done" | "error" |
 type Draft = {
   category: string;
   currentIndex: number;
-  items: { id: number; actual_qty: number; touched: boolean }[];
+  items: { id: number; actual_qty: number; touched: boolean; seen_qty?: number }[];
 };
 
 function draftKey(category: string) {
@@ -60,7 +62,7 @@ export function StocktakeFlow({ category }: { category: string }) {
       const draft: Draft = {
         category,
         currentIndex: idx,
-        items: list.map((i) => ({ id: i.id, actual_qty: i.actual_qty, touched: i.touched })),
+        items: list.map((i) => ({ id: i.id, actual_qty: i.actual_qty, touched: i.touched, seen_qty: i.seen_qty })),
       };
       try {
         localStorage.setItem(draftKey(category), JSON.stringify(draft));
@@ -96,6 +98,7 @@ export function StocktakeFlow({ category }: { category: string }) {
         expected_qty: p.stock_qty,
         actual_qty: p.stock_qty,
         touched: false,
+        seen_qty: p.stock_qty,
       }));
 
       let restoredIndex = 0;
@@ -106,7 +109,10 @@ export function StocktakeFlow({ category }: { category: string }) {
           if (draft.category === category && draft.items.length === mapped.length) {
             mapped = mapped.map((item) => {
               const saved = draft.items.find((d) => d.id === item.id);
-              return saved ? { ...item, actual_qty: saved.actual_qty, touched: saved.touched } : item;
+              // 還沒點過的項目用最新帳上數；點過的保留當時點到的數與當時看到的帳上數
+              return saved && saved.touched
+                ? { ...item, actual_qty: saved.actual_qty, touched: true, seen_qty: saved.seen_qty ?? item.expected_qty }
+                : item;
             });
             restoredIndex = Math.min(draft.currentIndex, mapped.length - 1);
           }
@@ -132,20 +138,27 @@ export function StocktakeFlow({ category }: { category: string }) {
 
   const updateCurrent = (patch: Partial<FlowItem>) => {
     setItems((prev) => {
-      const next = prev.map((it, i) => (i === currentIndex ? { ...it, ...patch, touched: true } : it));
+      const next = prev.map((it, i) =>
+        i === currentIndex ? { ...it, ...patch, seen_qty: it.touched ? it.seen_qty : it.expected_qty, touched: true } : it
+      );
       persistDraft(currentIndex, next);
       return next;
     });
   };
 
   const goNext = () => {
+    // 按「帳上一致，下一項」也算點過這一項
+    const confirmed = items.map((it, i) =>
+      i === currentIndex && !it.touched ? { ...it, touched: true, seen_qty: it.expected_qty } : it
+    );
+    setItems(confirmed);
     if (currentIndex + 1 >= items.length) {
-      persistDraft(currentIndex, items);
+      persistDraft(currentIndex, confirmed);
       setPhase("summary");
     } else {
       const nextIdx = currentIndex + 1;
       setCurrentIndex(nextIdx);
-      persistDraft(nextIdx, items);
+      persistDraft(nextIdx, confirmed);
     }
   };
 
@@ -156,15 +169,22 @@ export function StocktakeFlow({ category }: { category: string }) {
     persistDraft(prevIdx, items);
   };
 
-  const diffItems = useMemo(() => items.filter((i) => i.actual_qty !== i.expected_qty), [items]);
+  const diffItems = useMemo(
+    () => items.filter((i) => i.actual_qty !== (i.touched ? i.seen_qty : i.expected_qty)),
+    [items]
+  );
 
-  // 送出交給資料庫函式 submit_stocktake（migration 012）：差異用「送出當下」的帳上數計算，
-  // 盤點途中有人點收或出貨也不會算錯；同一天重盤同一商品會覆蓋當天紀錄；整批一個交易完成。
+  // 送出交給資料庫函式 submit_stocktake（migration 013）：差異 = 點到的數量 − 點的當下畫面上的帳上數，
+  // 點完之後才發生的出貨／點收不會被算成盤點差異；同一天重盤同一商品會覆蓋當天紀錄；整批一個交易完成。
   const submitStocktake = async () => {
     setPhase("submitting");
     try {
       const { data, error } = await getSupabase().rpc("submit_stocktake", {
-        p_items: items.map((item) => ({ product_id: item.product_id, counted_qty: item.actual_qty })),
+        p_items: items.map((item) => ({
+          product_id: item.product_id,
+          counted_qty: item.actual_qty,
+          expected_qty: item.touched ? item.seen_qty : item.expected_qty,
+        })),
       });
       if (error) throw error;
       const diffCount = Number((data as { diff_count?: number } | null)?.diff_count) || 0;
@@ -229,7 +249,8 @@ export function StocktakeFlow({ category }: { category: string }) {
         <main className="px-5 max-w-2xl mx-auto pb-28">
           <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden mb-5">
             {items.map((item) => {
-              const diff = item.actual_qty - item.expected_qty;
+              const base = item.touched ? item.seen_qty : item.expected_qty;
+              const diff = item.actual_qty - base;
               return (
                 <div key={item.id} className="px-4 py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -238,7 +259,7 @@ export function StocktakeFlow({ category }: { category: string }) {
                   </div>
                   <div className="flex-shrink-0 text-right">
                     <p className={`text-sm font-semibold tabular-nums ${diff !== 0 ? "text-[#E00]" : "text-[#171717]"}`}>
-                      {item.actual_qty} <span className="text-[#8F8F8F] font-normal">/ {item.expected_qty}</span>
+                      {item.actual_qty} <span className="text-[#8F8F8F] font-normal">/ {base}</span>
                     </p>
                     {diff !== 0 && <p className="text-[11px] text-[#E00]">{diff > 0 ? `+${diff}` : diff}</p>}
                   </div>

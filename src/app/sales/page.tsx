@@ -154,15 +154,16 @@ function SalesPageContent() {
     try {
       const supabase = getSupabase();
       // 「全部」不含「不成立」：與今天、分析頁的資料庫報表同一口徑（作廢單不算營收也不算成本）。
-      const rows = await fetchAllRows<Pick<SalesOrder, "id" | "order_amount" | "net_revenue">>(() => {
-        const q = withOrderFilters(supabase.from("sales_orders").select("id, order_amount, net_revenue"), search, status);
+      const rows = await fetchAllRows<Pick<SalesOrder, "id" | "order_amount" | "net_revenue" | "status">>(() => {
+        const q = withOrderFilters(supabase.from("sales_orders").select("id, order_amount, net_revenue, status"), search, status);
         return status === "全部" ? q.neq("status", CANCELLED_STATUS) : q;
       });
       const totalRevenue = rows.reduce((s, o) => s + (Number(o.order_amount) || 0), 0);
       const totalNet = rows.reduce((s, o) => s + (Number(o.net_revenue) || 0), 0);
 
       let totalCOGS = 0;
-      const ids = rows.map((o) => o.id);
+      // 不成立的單不算成本（與下方每張訂單卡、資料庫報表一致）
+      const ids = rows.filter((o) => o.status !== CANCELLED_STATUS).map((o) => o.id);
       for (let i = 0; i < ids.length; i += 300) {
         const chunk = ids.slice(i, i + 300);
         const items = await fetchAllRows<{ product_id: number | null; qty: number | null; unit_cost_at_sale: number | null }>(() =>

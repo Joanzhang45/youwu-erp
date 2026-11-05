@@ -41,7 +41,7 @@ async function main() {
     domestic_shipping_per_unit_cny: parseFloat(r['單個境內運費(CNY)']) || null,
     initial_order_qty: parseInt(r['初次訂貨數量']) || null,
     domestic_shipping_per_unit_thrown: parseFloat(r['單個境內運費(拋轉)']) || null,
-    platform_fee_rate: parseFloat(r['蝦皮平台抽成(均14.5%)']) || 0.145,
+    platform_fee_rate: 12.9, // 百分比數字；訂單級實測口徑（migration 012 起 CHECK 1~100，不可再存 0.145）
     avg_daily_sales: parseFloat(r['平均每日銷量']) || null,
     avg_shipping_days: parseFloat(r['平均運輸天數']) || null,
     unit_profit: parseFloat(r['單品利潤']) || null,

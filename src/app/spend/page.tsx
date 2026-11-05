@@ -169,37 +169,51 @@ function SpendPageContent() {
         return;
       }
       // 同一份報表匯兩次不能算兩次：跳過「日期＋金額＋名稱」已存在的列（資料庫另有唯一索引當最後防線）。
-      const valid = parsed.filter((r) => r.ad_date && /^\d{4}-\d{2}-\d{2}$/.test(String(r.ad_date)));
+      const normDate = (d: unknown) => {
+        const m = String(d ?? "").trim().match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+        return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : null;
+      };
+      const valid = parsed
+        .map((r) => ({ ...r, ad_date: normDate(r.ad_date), amount: Math.round(Number(r.amount) * 100) / 100 }))
+        .filter((r): r is typeof r & { ad_date: string } => !!r.ad_date);
       const badDate = parsed.length - valid.length;
       if (valid.length === 0) {
-        toast("CSV 裡找不到可用的日期（需為 YYYY-MM-DD）", "error");
+        toast("CSV 裡找不到可用的日期", "error");
         return;
       }
-      const dates = valid.map((r) => String(r.ad_date)).sort();
+      const dates = valid.map((r) => r.ad_date).sort();
       const supabase = getSupabase();
-      const { data: existing, error: exErr } = await supabase
-        .from("ad_costs")
-        .select("ad_date, amount, description")
-        .gte("ad_date", dates[0])
-        .lte("ad_date", dates[dates.length - 1]);
-      if (exErr) throw exErr;
+      const existing = await fetchAllRows<{ ad_date: string; amount: number; description: string | null }>(() =>
+        supabase
+          .from("ad_costs")
+          .select("id, ad_date, amount, description")
+          .gte("ad_date", dates[0])
+          .lte("ad_date", dates[dates.length - 1])
+      );
       const key = (r: { ad_date?: string | null; amount?: number | string | null; description?: string | null }) =>
-        `${r.ad_date}|${Number(r.amount)}|${r.description ?? ""}`;
-      const seen = new Set((existing || []).map(key));
+        `${r.ad_date}|${Number(r.amount).toFixed(2)}|${r.description ?? ""}`;
+      const inDb = new Set(existing.map(key));
+      const inFile = new Set<string>();
+      let dupInFile = 0;
       const fresh = valid.filter((r) => {
         const k = key(r);
-        if (seen.has(k)) return false;
-        seen.add(k);
+        if (inDb.has(k)) return false;
+        if (inFile.has(k)) {
+          dupInFile++;
+          return false;
+        }
+        inFile.add(k);
         return true;
       });
       if (fresh.length > 0) {
         const { error } = await supabase.from("ad_costs").insert(fresh);
         if (error) throw error;
       }
-      const skipped = valid.length - fresh.length;
+      const skipped = valid.length - fresh.length - dupInFile;
       toast(
         `匯入 ${fresh.length} 筆廣告費` +
           (skipped ? `，跳過 ${skipped} 筆已存在` : "") +
+          (dupInFile ? `，檔案內有 ${dupInFile} 筆日期、金額、名稱完全相同，只匯入一次，請確認` : "") +
           (badDate ? `，${badDate} 筆日期無法辨識未匯入` : "")
       );
       loadAds(true);
