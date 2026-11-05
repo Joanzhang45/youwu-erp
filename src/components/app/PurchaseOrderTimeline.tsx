@@ -15,6 +15,7 @@ import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { LogisticsCreateSheet, PurchaseOrderEditSheet, ShipmentCostSheet, ShipmentCreateSheet } from "./InboundSheets";
 import { ReceivingPhotos } from "./ReceivingPhotos";
+import { todayLocal } from "./Sheet";
 import type { DomesticLogistics, PurchaseOrder, PurchaseOrderItem, ReceivingRecord } from "@/lib/database.types";
 import {
   computeStageIndex,
@@ -217,7 +218,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
     try {
       const patch: Partial<DomesticLogistics> = { status: step.next };
       if (step.next === "已入庫" && !record.actual_arrival) {
-        patch.actual_arrival = new Date().toISOString().split("T")[0];
+        patch.actual_arrival = todayLocal();
       }
       const { error } = await getSupabase().from("domestic_logistics").update(patch).eq("id", record.id);
       if (error) throw error;
@@ -236,7 +237,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
     setBusyKey(`ship-${group.shipment.id}`);
     try {
       const patch: Record<string, string> = { status: step.next };
-      if (step.next === "已到達") patch.actual_arrival = new Date().toISOString().split("T")[0];
+      if (step.next === "已到達") patch.actual_arrival = todayLocal();
       const { error } = await getSupabase().from("consolidated_shipments").update(patch).eq("id", group.shipment.id);
       if (error) throw error;
       toast(step.cta);

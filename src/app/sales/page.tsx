@@ -12,7 +12,7 @@ import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import type { SalesOrder, SalesOrderItem } from "@/lib/database.types";
 import { RequireAuth } from "@/components/app/RequireAuth";
-import { CANCELLED_STATUS, fetchAllRows, itemUnitCost } from "@/lib/fetchAll";
+import { fetchAllRows, itemUnitCost } from "@/lib/fetchAll";
 import { SearchIcon } from "@/components/app/icons";
 
 const PAGE_SIZE = 20;
@@ -121,11 +121,11 @@ function SalesPageContent() {
               costMap[p.id] = Number(p.unit_cost_ntd) || 0;
             });
           }
-          const orderStatus: Record<number, string | null> = Object.fromEntries(rows.map((o) => [o.id, o.status]));
+          const cancelled = new Set(rows.filter((o) => o.is_cancelled).map((o) => o.id));
           const cogsMap: Record<number, number> = {};
           (items || []).forEach((it) => {
             if (!it.order_id) return;
-            const cost = it.order_id && orderStatus[it.order_id] === CANCELLED_STATUS ? 0 : itemUnitCost(it, costMap);
+            const cost = cancelled.has(it.order_id) ? 0 : itemUnitCost(it, costMap);
             cogsMap[it.order_id] = (cogsMap[it.order_id] || 0) + cost * (Number(it.qty) || 1);
           });
           setCostByOrder((prev) => (reset ? cogsMap : { ...prev, ...cogsMap }));
@@ -153,17 +153,17 @@ function SalesPageContent() {
     setSummaryLoading(true);
     try {
       const supabase = getSupabase();
-      // 「全部」不含「不成立」：與今天、分析頁的資料庫報表同一口徑（作廢單不算營收也不算成本）。
-      const rows = await fetchAllRows<Pick<SalesOrder, "id" | "order_amount" | "net_revenue" | "status">>(() => {
-        const q = withOrderFilters(supabase.from("sales_orders").select("id, order_amount, net_revenue, status"), search, status);
-        return status === "全部" ? q.neq("status", CANCELLED_STATUS) : q;
+      // 「全部」不含不成立／取消／退貨：與今天、分析頁的資料庫報表同一口徑（不算營收也不算成本）。
+      const rows = await fetchAllRows<Pick<SalesOrder, "id" | "order_amount" | "net_revenue" | "is_cancelled">>(() => {
+        const q = withOrderFilters(supabase.from("sales_orders").select("id, order_amount, net_revenue, is_cancelled"), search, status);
+        return status === "全部" ? q.eq("is_cancelled", false) : q;
       });
       const totalRevenue = rows.reduce((s, o) => s + (Number(o.order_amount) || 0), 0);
       const totalNet = rows.reduce((s, o) => s + (Number(o.net_revenue) || 0), 0);
 
       let totalCOGS = 0;
       // 不成立的單不算成本（與下方每張訂單卡、資料庫報表一致）
-      const ids = rows.filter((o) => o.status !== CANCELLED_STATUS).map((o) => o.id);
+      const ids = rows.filter((o) => !o.is_cancelled).map((o) => o.id);
       for (let i = 0; i < ids.length; i += 300) {
         const chunk = ids.slice(i, i + 300);
         const items = await fetchAllRows<{ product_id: number | null; qty: number | null; unit_cost_at_sale: number | null }>(() =>
@@ -339,10 +339,10 @@ function OrderCard({
       {o.status && (
         <span
           className={`inline-block mt-2 text-[10px] px-2 py-0.5 rounded-full border ${
-            o.status.includes("完成")
-              ? "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30"
-              : o.status.includes("取消")
+            o.is_cancelled
               ? "bg-[#E00]/10 text-[#E00] border-[#E00]/30"
+              : o.status.includes("完成")
+              ? "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30"
               : "bg-[#0070F3]/10 text-[#0070F3] border-[#0070F3]/30"
           }`}
         >

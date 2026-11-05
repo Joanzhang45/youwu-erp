@@ -274,6 +274,8 @@ export interface SalesOrder {
   platform_coupon: number | null
   net_revenue: number | null
   status: string | null
+  /** 資料庫自動算（migration 018 is_cancelled_status）：不成立／取消／退貨退款＝true；不算營收、成本、銷量 */
+  is_cancelled: boolean
   notes: string | null
   created_at: string
 }

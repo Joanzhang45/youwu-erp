@@ -82,6 +82,12 @@ export function PurchaseOrderFormSheet({
 
   // 數量與單價（qty）
   const [qty, setQty] = useState(1);
+  // 數量輸入框的文字：刪光時先留空，不要立刻變回 1（否則打「5」會變成「15」）
+  const [qtyText, setQtyText] = useState("1");
+  const setQtyBoth = (n: number) => {
+    setQty(n);
+    setQtyText(String(n));
+  };
   const [unitPrice, setUnitPrice] = useState("");
 
   // 單頭（header）
@@ -156,7 +162,7 @@ export function PurchaseOrderFormSheet({
       variant_name: p.variant_name,
       product_image: p.product_image,
     });
-    setQty(1);
+    setQtyBoth(1);
     setUnitPrice(p.purchase_price_cny != null ? String(p.purchase_price_cny) : "");
     setPhase("qty");
   };
@@ -198,7 +204,8 @@ export function PurchaseOrderFormSheet({
           variant_name: npVariant.trim() || null,
           category: npCategory,
           purchase_price_cny: priceNum,
-          product_status: "測品",
+          // 叫貨就是要賣：預設「常駐」，才會出現在補貨與缺貨提醒（測品會被排除）
+          product_status: "常駐",
           product_positioning: "一般款",
         })
         .select("id, product_name, variant_name, product_image")
@@ -210,7 +217,7 @@ export function PurchaseOrderFormSheet({
         variant_name: data.variant_name,
         product_image: data.product_image,
       });
-      setQty(1);
+      setQtyBoth(1);
       setUnitPrice(String(priceNum));
       setPhase("qty");
     } catch (e) {
@@ -223,7 +230,8 @@ export function PurchaseOrderFormSheet({
   const confirmQty = () => {
     if (!pending) return;
     const priceNum = Number(unitPrice);
-    if (!qty || qty <= 0 || !unitPrice || Number.isNaN(priceNum) || priceNum <= 0) return;
+    const q = Math.max(1, qty);
+    if (!unitPrice || Number.isNaN(priceNum) || priceNum <= 0) return;
     setItems((prev) => [
       ...prev,
       {
@@ -232,7 +240,7 @@ export function PurchaseOrderFormSheet({
         product_name: pending.product_name,
         variant_name: pending.variant_name,
         product_image: pending.product_image,
-        qty,
+        qty: q,
         unit_price_cny: priceNum,
       },
     ]);
@@ -265,84 +273,38 @@ export function PurchaseOrderFormSheet({
     }
   };
 
+  const rateNum = Number(cnyRate);
+  const rateValid = cnyRate.trim() !== "" && rateNum >= 3 && rateNum <= 10;
+
+  // 單頭與品項由資料庫函式一次存好（create_purchase_order，migration 018）：
+  // 斷線不會留下沒有品項的空單，單號也在資料庫裡依序產生。
   const submit = async () => {
     if (items.length === 0) return;
-    const rate = Number(cnyRate) || CNY_RATE_DEFAULT;
+    if (!rateValid) {
+      setSubmitError("匯率要填 3 到 10 之間的數字");
+      return;
+    }
     setSubmitting(true);
     setSubmitError("");
-    const supabase = getSupabase();
-    let createdPoId: number | null = null;
     try {
-      const today = orderDate.replace(/-/g, "");
-      const subtotal = Math.round(subtotalCny * 10000) / 10000;
-      const totalNtd = Math.round(subtotal * rate * 100) / 100;
-
-      // po_number 撞號重試（單人使用機率極低，仍留 3 次保險：每次重試都重新查當日最大序號）
-      for (let attempt = 0; attempt < 3 && !createdPoId; attempt++) {
-        const { data: existing } = await supabase
-          .from("purchase_orders")
-          .select("po_number")
-          .ilike("po_number", `PO-${today}-%`)
-          .order("po_number", { ascending: false })
-          .limit(1);
-        const last = existing?.[0]?.po_number as string | undefined;
-        const seq = (last ? Number(last.split("-").pop()) : 0) + 1;
-        const poNumber = `PO-${today}-${String(seq).padStart(3, "0")}`;
-
-        const { data: poData, error: poErr } = await supabase
-          .from("purchase_orders")
-          .insert({
-            po_number: poNumber,
-            purchaser: purchaser.trim() || "張瓊安",
-            order_date: orderDate,
-            cny_rate: rate,
-            notes: notes.trim() || null,
-            subtotal_cny: subtotal,
-            total_payment_cny: subtotal,
-            total_payment_ntd: totalNtd,
-            grand_total: subtotal,
-            status: "ordered",
-            status_draft: false,
-            status_confirmed: false,
-            status_ordered: true,
-            status_paid: false,
-            status_shipping: false,
-            status_warehouse_received: false,
-            status_warehouse_stored: false,
-            status_return_shipping: false,
-            status_received: false,
-            status_cancelled: false,
-            status_abnormal: 0,
-          })
-          .select("id")
-          .single();
-
-        if (poErr) {
-          if ((poErr as { code?: string }).code === "23505" && attempt < 2) continue;
-          throw poErr;
-        }
-        createdPoId = poData.id;
+      const { data, error } = await getSupabase().rpc("create_purchase_order", {
+        p: {
+          order_date: orderDate,
+          cny_rate: rateNum,
+          purchaser: purchaser.trim(),
+          notes: notes.trim(),
+          items: items.map((i) => ({ product_id: i.product_id, qty: i.qty, unit_price_cny: i.unit_price_cny })),
+        },
+      });
+      if (error) {
+        if (error.message.includes("BAD_RATE")) throw new Error("匯率要填 3 到 10 之間的數字");
+        if (error.message.includes("NO_ITEMS")) throw new Error("還沒有加任何品項");
+        if (error.message.includes("BAD_ITEM")) throw new Error("有品項的數量或單價不對，請檢查");
+        if (error.message.includes("PRODUCT_NOT_FOUND")) throw new Error("有品項的商品已經不存在，請移除後重加");
+        throw error;
       }
-      if (!createdPoId) throw new Error("採購單編號產生失敗，請重試");
-
-      const itemRows = items.map((i) => ({
-        po_id: createdPoId,
-        product_id: i.product_id,
-        product_name: i.product_name,
-        variant_name: i.variant_name,
-        product_image: i.product_image,
-        qty: i.qty,
-        unit_price_cny: i.unit_price_cny,
-        subtotal_cny: Math.round(i.qty * i.unit_price_cny * 10000) / 10000,
-      }));
-      const { error: itemErr } = await supabase.from("purchase_order_items").insert(itemRows);
-      if (itemErr) throw itemErr;
-
-      onCreated(createdPoId);
+      onCreated((data as { id: number }).id);
     } catch (e) {
-      if (createdPoId) {
-        await supabase.from("purchase_orders").delete().eq("id", createdPoId);
-      }
       setSubmitError(e instanceof Error ? e.message : "建立失敗，請重試");
     } finally {
       setSubmitting(false);
@@ -572,7 +534,7 @@ export function PurchaseOrderFormSheet({
                   className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150"
                 />
               </div>
-              <p className="text-[11px] text-[#8F8F8F]">商品狀態預設「測品」，之後可到「商品」頁補齊其他資料</p>
+              <p className="text-[11px] text-[#8F8F8F]">商品狀態預設「常駐」，之後可到「商品」頁補齊其他資料</p>
             </div>
 
             {npError && <p className="text-[#E00] text-sm mt-3">{npError}</p>}
@@ -613,7 +575,7 @@ export function PurchaseOrderFormSheet({
               <label className="block text-sm font-medium text-[#171717] mb-1.5">數量</label>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setQty(Math.max(1, qty - 1))}
+                  onClick={() => setQtyBoth(Math.max(1, qty - 1))}
                   className="w-11 h-11 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] text-xl font-medium text-[#171717] active:scale-[0.97] transition-transform duration-150"
                 >
                   −
@@ -621,13 +583,18 @@ export function PurchaseOrderFormSheet({
                 <input
                   type="number"
                   inputMode="numeric"
-                  value={qty}
-                  onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  value={qtyText}
+                  onChange={(e) => {
+                    setQtyText(e.target.value);
+                    const n = parseInt(e.target.value);
+                    setQty(n > 0 ? Math.min(n, 99999) : 0);
+                  }}
+                  onBlur={() => setQtyBoth(Math.max(1, qty))}
                   className="flex-1 text-center text-3xl font-semibold py-2 border border-[#EAEAEA] rounded-lg outline-none focus:border-[#171717] focus:ring-2 focus:ring-[#0070F3]/30 tabular-nums"
                   min={1}
                 />
                 <button
-                  onClick={() => setQty(qty + 1)}
+                  onClick={() => setQtyBoth(qty + 1)}
                   className="w-11 h-11 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] text-xl font-medium text-[#171717] active:scale-[0.97] transition-transform duration-150"
                 >
                   +
@@ -717,7 +684,7 @@ export function PurchaseOrderFormSheet({
 
             <div className="bg-[#FAFAFA] rounded-xl p-3 mt-4 border border-[#EAEAEA] space-y-1.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-[#666666]">單號</span>
+                <span className="text-[#666666]">預計單號</span>
                 <span className="font-mono font-medium text-[#171717]">{poNumberPreview || "產生中..."}</span>
               </div>
               <div className="flex justify-between">
@@ -731,7 +698,7 @@ export function PurchaseOrderFormSheet({
               <div className="flex justify-between">
                 <span className="text-[#666666]">約合 NTD</span>
                 <span className="font-semibold text-[#171717] tabular-nums">
-                  NT${Math.round(subtotalCny * (Number(cnyRate) || CNY_RATE_DEFAULT)).toLocaleString()}
+                  {rateValid ? `NT$${Math.round(subtotalCny * rateNum).toLocaleString()}` : "匯率要填 3～10"}
                 </span>
               </div>
             </div>

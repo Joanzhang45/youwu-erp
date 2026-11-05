@@ -34,4 +34,5 @@ export function itemUnitCost(
   return v || 0;
 }
 
-export const CANCELLED_STATUS = "不成立";
+// 哪些訂單不算錢：一律看資料庫的 sales_orders.is_cancelled（migration 018），
+// 前端不要自己比對狀態文字，才不會和報表、庫存三套標準。

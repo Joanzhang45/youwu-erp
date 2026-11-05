@@ -236,11 +236,12 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
         })),
       });
       if (error) throw error;
-      const r = (data || {}) as { unlinked?: number; cost_skipped?: number };
+      const r = (data || {}) as { unlinked?: number; cost_skipped?: number; freight_by_qty?: boolean; no_weight?: number };
       clearDraft();
       const warn: string[] = [];
       if (r.unlinked) warn.push(`${r.unlinked} 項沒對到商品，庫存沒有增加`);
       if (r.cost_skipped) warn.push(`${r.cost_skipped} 項缺進價，成本沒有更新`);
+      if (r.freight_by_qty && r.no_weight) warn.push(`${r.no_weight} 項沒填重量，這批運費改成按件數平均分`);
       toast(warn.length ? `點收完成，但 ${warn.join("；")}` : "點收完成！庫存與成本已更新。", warn.length ? "error" : undefined);
       setPhase("done");
       setTimeout(() => router.push("/today"), warn.length ? 3000 : 900);

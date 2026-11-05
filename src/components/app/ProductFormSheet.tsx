@@ -4,6 +4,7 @@
 // （bottom sheet on 手機、置中 modal on 桌機），欄位沿用舊 /products 頁 addForm 能力，
 // 一個字都不改動舊頁本身。編輯既有商品走 ProductDetail 全頁（PRD 詳情/編輯用 query param）；
 // 這支只負責「新增」，範圍窄、欄位少，適合快速動作用 sheet 而非整頁。
+import { PRODUCT_STATUS_OPTIONS } from "@/lib/productStatus";
 import { useState } from "react";
 import type { Product } from "@/lib/database.types";
 import { CheckIcon } from "./icons";
@@ -12,7 +13,7 @@ const CATEGORIES = ["收納好物", "餐廚區", "浴廁區", "床寢區", "燈�
 
 type FormState = Partial<Product>;
 
-const INITIAL: FormState = { product_status: "測品", product_positioning: "一般款" };
+const INITIAL: FormState = { product_status: "常駐", product_positioning: "一般款" };
 
 export function ProductFormSheet({
   onCreate,
@@ -116,13 +117,15 @@ export function ProductFormSheet({
             <div>
               <label className="block text-xs font-medium text-[#171717] mb-1">商品狀態</label>
               <select
-                value={form.product_status || "測品"}
+                value={form.product_status || "常駐"}
                 onChange={(e) => setForm({ ...form, product_status: e.target.value })}
                 className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150 bg-white"
               >
-                <option value="測品">測品</option>
-                <option value="常駐">常駐</option>
-                <option value="停售">停售</option>
+                {PRODUCT_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
             </div>
             <div>

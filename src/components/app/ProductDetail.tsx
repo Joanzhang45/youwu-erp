@@ -10,8 +10,8 @@ import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
 import { ChevronRightIcon, CheckIcon } from "./icons";
+import { PRODUCT_STATUS_OPTIONS } from "@/lib/productStatus";
 
-const STATUS_OPTIONS = ["測品", "常駐", "停售"];
 const POSITIONING_OPTIONS = ["引流款", "一般款", "利潤款"];
 
 type EditForm = {
@@ -175,7 +175,9 @@ export function ProductDetail({ id }: { id: number }) {
                 onChange={(e) => setForm({ ...form, product_status: e.target.value })}
                 className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150 bg-white"
               >
-                {STATUS_OPTIONS.map((s) => (
+                {!form.product_status && <option value="">（未設定）</option>}
+                {/* 資料庫裡若有選單外的舊值，照樣列出來，避免存檔時被改成第一個選項 */}
+                {[...new Set<string>([...PRODUCT_STATUS_OPTIONS, ...(form.product_status ? [form.product_status] : [])])].map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>

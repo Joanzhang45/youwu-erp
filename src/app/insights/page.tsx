@@ -7,7 +7,7 @@
 // PRD 明確要「本月 Top10/Bottom10」，所以這裡把 qty 改成從當期 order_items 即時加總）。
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
-import { fetchAllRows } from "@/lib/fetchAll";
+import { fetchAllRows, itemUnitCost } from "@/lib/fetchAll";
 import { useToast } from "@/components/Toast";
 import type { MonthlyProfitability, Product } from "@/lib/database.types";
 import { RequireAuth } from "@/components/app/RequireAuth";
@@ -15,8 +15,9 @@ import { MonthlyTrendChart } from "@/components/app/MonthlyTrendChart";
 
 type Period = "month" | "lastMonth" | "custom";
 type RankTab = "top" | "bottom";
-type OrderRow = { id: number; order_date: string | null; status: string | null };
-type ItemRow = { order_id: number; product_id: number | null; qty: number | null };
+type OrderRow = { id: number; order_date: string | null; is_cancelled: boolean; order_amount: number | null; net_revenue: number | null };
+type ItemRow = { order_id: number; product_id: number | null; qty: number | null; subtotal: number | null; unit_cost_at_sale: number | null };
+type DatedAmount = { d: string | null; amount: number | null };
 
 type RankedProduct = {
   id: number;
@@ -24,10 +25,12 @@ type RankedProduct = {
   variant_name: string | null;
   product_image: string | null;
   periodQty: number;
-  unitProfit: number;
+  revenue: number;
   totalProfit: number;
   margin: number;
 };
+
+type Headline = Omit<MonthlyProfitability, "month">;
 
 // v_monthly_profitability 的金額欄位是 numeric 除法算出來的浮點數（例：2637.7097），
 // 直接 .toLocaleString() 預設最多顯示 3 位小數會噴出「$2,637.71」這種雜訊——2026-07-12
@@ -61,29 +64,19 @@ function getPeriodRange(period: Period, customFrom: string, customTo: string): {
     const y = m < 0 ? now.getFullYear() - 1 : now.getFullYear();
     return monthBoundaries(y, ((m % 12) + 12) % 12);
   }
-  if (customFrom && customTo) return { from: customFrom, to: customTo };
+  if (customFrom && customTo && customFrom <= customTo) return { from: customFrom, to: customTo };
   return null;
 }
 
-// platform_fee_rate 存百分比數字（12.9 = 12.9%，訂單級實測口徑）。2026-11-05 migration 012
-// 把混存的 0.145／14.5 統一成 12.9，並加 CHECK 限制在 1~100，所以這裡固定除以 100。
-function buildRanked(p: Product, periodQty: number): RankedProduct {
-  const revenue = Number(p.selling_price) || 0;
-  const cost = Number(p.unit_cost_ntd) || 0;
-  const feeRate = Number(p.platform_fee_rate) || 0;
-  const fees = revenue * (feeRate / 100);
-  const unitProfit = revenue - cost - fees;
-  const margin = revenue > 0 ? unitProfit / revenue : 0;
-  return {
-    id: p.id,
-    product_name: p.product_name,
-    variant_name: p.variant_name,
-    product_image: p.product_image,
-    periodQty,
-    unitProfit,
-    totalProfit: unitProfit * periodQty,
-    margin,
-  };
+// 損益與商品排行都用「這段期間實際成立的訂單」算（2026-11-06 第二次健檢 #13）：
+// - 營收用訂單實收（net_revenue，已扣蝦皮費用），依品項小計比例分到各商品；
+//   訂單沒有實收資料時，退回「品項小計 ×（1 − 平台費率）」估算。
+// - 成本用賣出當下的成本快照（unit_cost_at_sale），舊資料沒有快照才用商品目前成本。
+// 這樣排行加總 ＝ 上方毛利（扣掉沒對到商品的品項），選自訂區間也是剛好那幾天。
+const DEFAULT_FEE_RATE = 12.9;
+
+function sumInRange(rows: DatedAmount[], from: string, to: string): number {
+  return rows.reduce((t, r) => (r.d && r.d >= from && r.d <= to ? t + (Number(r.amount) || 0) : t), 0);
 }
 
 export default function InsightsPage() {
@@ -101,6 +94,8 @@ function InsightsPageContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
+  const [ads, setAds] = useState<DatedAmount[]>([]);
+  const [expenses, setExpenses] = useState<DatedAmount[]>([]);
   const [period, setPeriod] = useState<Period>("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -135,16 +130,22 @@ function InsightsPageContent() {
       // 伺服器夾住）。單次 select 會靜默截斷、且截到的是哪一段由 PostgREST 預設排序
       // 決定、不保證含最新列——這正是「本月排行榜」一度全空的根因：本月訂單剛好落在
       // 被截掉的那段。分頁抓好全量再篩期間，不能只加大 limit。
-      const [ordersData, itemsData] = await Promise.all([
+      const [ordersData, itemsData, adsData, expData] = await Promise.all([
         fetchAllRows<OrderRow>(() =>
-          supabase.from("sales_orders").select("id, order_date, status").not("order_date", "is", null)
+          supabase.from("sales_orders").select("id, order_date, is_cancelled, order_amount, net_revenue").not("order_date", "is", null)
         ),
         fetchAllRows<ItemRow>(() =>
-          supabase.from("sales_order_items").select("order_id, product_id, qty")
+          supabase.from("sales_order_items").select("order_id, product_id, qty, subtotal, unit_cost_at_sale")
+        ),
+        fetchAllRows<{ ad_date: string | null; amount: number | null }>(() => supabase.from("ad_costs").select("id, ad_date, amount")),
+        fetchAllRows<{ expense_date: string | null; amount: number | null }>(() =>
+          supabase.from("operating_expenses").select("id, expense_date, amount")
         ),
       ]);
       setOrders(ordersData);
       setItems(itemsData);
+      setAds(adsData.map((a) => ({ d: a.ad_date, amount: a.amount })));
+      setExpenses(expData.map((e) => ({ d: e.expense_date, amount: e.amount })));
     } catch (e) {
       toast(e instanceof Error ? e.message : "載入失敗", "error");
     } finally {
@@ -162,13 +163,10 @@ function InsightsPageContent() {
 
   const range = useMemo(() => getPeriodRange(period, customFrom, customTo), [period, customFrom, customTo]);
 
-  // Blocker 修復（tester 2026-07-12）：損益卡原本寫死永遠找「本月」那一列，完全沒讀
-  // period/range，切「上月」「自訂」時排行表會變、卡片卻紋風不動。改成卡片標題與四個
-  // 數字都跟著 period 走，資料源仍是 v_monthly_profitability（不新增查詢，用同一批已抓
-  // 回來的 monthly 列，只是依 period 決定要哪一列／哪幾列)。
-  const { headlineTitle, headline } = useMemo(() => {
-    const zero = {
-      month: "",
+  const headlineTitle = period === "month" ? "本月損益" : period === "lastMonth" ? "上月損益" : "自訂區間損益";
+
+  const { headline, ranked } = useMemo(() => {
+    const zero: Headline = {
       order_count: 0,
       total_revenue: 0,
       total_net_revenue: 0,
@@ -178,67 +176,85 @@ function InsightsPageContent() {
       total_expenses: 0,
       net_profit: 0,
     };
-    const now = new Date();
+    if (!range) return { headline: zero, ranked: [] as RankedProduct[] };
 
-    if (period === "month") {
-      const key = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-01`;
-      // 誠實顯示：本月若還沒有任何訂單/廣告/費用列，v_monthly_profitability 不會有這一列，
-      // 落到 0 而不是偷用上個月數字冒充（同 /today 既有寫法）
-      return { headlineTitle: "本月損益", headline: monthly.find((m) => m.month === key) ?? { ...zero, month: key } };
-    }
-
-    if (period === "lastMonth") {
-      const m = now.getMonth() - 1;
-      const y = m < 0 ? now.getFullYear() - 1 : now.getFullYear();
-      const key = `${y}-${pad2(((m % 12) + 12) % 12 + 1)}-01`;
-      return { headlineTitle: "上月損益", headline: monthly.find((m2) => m2.month === key) ?? { ...zero, month: key } };
-    }
-
-    // 自訂區間：v_monthly_profitability 是月粒度，起訖若落在同一個月直接取那一列；
-    // 跨月則把區間覆蓋到的整月列加總（近似值——起訖若非整月邊界，加總會含到區間外
-    // 的日子，這是月粒度 view 的已知限制，不在本次任務範圍內建日粒度 view）。
-    if (!customFrom || !customTo) {
-      return { headlineTitle: "自訂區間損益", headline: zero };
-    }
-    const fromKey = `${customFrom.slice(0, 7)}-01`;
-    const toKey = `${customTo.slice(0, 7)}-01`;
-    const matched = monthly.filter((m) => m.month >= fromKey && m.month <= toKey);
-    if (matched.length === 0) {
-      return { headlineTitle: "自訂區間損益", headline: zero };
-    }
-    const agg = matched.reduce(
-      (acc, m) => ({
-        ...acc,
-        order_count: acc.order_count + m.order_count,
-        total_revenue: acc.total_revenue + m.total_revenue,
-        total_net_revenue: acc.total_net_revenue + m.total_net_revenue,
-        total_cogs: acc.total_cogs + m.total_cogs,
-        gross_profit: acc.gross_profit + m.gross_profit,
-        total_ad_cost: acc.total_ad_cost + m.total_ad_cost,
-        total_expenses: acc.total_expenses + m.total_expenses,
-        net_profit: acc.net_profit + m.net_profit,
-      }),
-      zero
-    );
-    return { headlineTitle: "自訂區間損益", headline: agg };
-  }, [period, customFrom, customTo, monthly]);
-
-  const ranked = useMemo(() => {
-    const eligible = products.filter((p) => p.selling_price && p.selling_price > 0 && p.product_status !== "停售");
-    if (!range) return [];
-    const validOrderIds = new Set(
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    const costMap = new Map(products.map((p) => [p.id, Number(p.unit_cost_ntd) || 0]));
+    const validOrders = new Map(
       orders
-        .filter((o) => o.status !== "不成立" && o.order_date && o.order_date >= range.from && o.order_date <= range.to)
-        .map((o) => o.id)
+        .filter((o) => !o.is_cancelled && o.order_date && o.order_date >= range.from && o.order_date <= range.to)
+        .map((o) => [o.id, o])
     );
-    const qtyByProduct = new Map<number, number>();
+    const subtotalByOrder = new Map<number, number>();
     items.forEach((it) => {
-      if (it.product_id != null && validOrderIds.has(it.order_id)) {
-        qtyByProduct.set(it.product_id, (qtyByProduct.get(it.product_id) || 0) + (it.qty || 0));
+      if (validOrders.has(it.order_id)) {
+        subtotalByOrder.set(it.order_id, (subtotalByOrder.get(it.order_id) || 0) + (Number(it.subtotal) || 0));
       }
     });
-    return eligible.map((p) => buildRanked(p, qtyByProduct.get(p.id) || 0)).filter((r) => r.periodQty > 0);
-  }, [products, orders, items, range]);
+
+    let cogs = 0;
+    const agg = new Map<number, { qty: number; revenue: number; cost: number }>();
+    // 還沒結算（沒有實收）的訂單：實收用「品項小計 ×（1 − 平台費率）」估算，損益卡與排行用同一個數
+    const estimatedNet = new Map<number, number>();
+    items.forEach((it) => {
+      const o = validOrders.get(it.order_id);
+      if (!o) return;
+      const qty = Number(it.qty) || 0;
+      const sub = Number(it.subtotal) || 0;
+      const orderSub = subtotalByOrder.get(it.order_id) || 0;
+      const p = it.product_id != null ? productMap.get(it.product_id) : undefined;
+      const settled = o.net_revenue != null && orderSub > 0;
+      const revenue = settled
+        ? (Number(o.net_revenue) * sub) / orderSub
+        : sub * (1 - (Number(p?.platform_fee_rate) || DEFAULT_FEE_RATE) / 100);
+      if (!settled) estimatedNet.set(o.id, (estimatedNet.get(o.id) || 0) + revenue);
+      if (it.product_id == null) return;
+      const cost = qty * itemUnitCost(it, costMap);
+      cogs += cost;
+      const a = agg.get(it.product_id) || { qty: 0, revenue: 0, cost: 0 };
+      a.qty += qty;
+      a.revenue += revenue;
+      a.cost += cost;
+      agg.set(it.product_id, a);
+    });
+
+    let revenueSum = 0;
+    let netSum = 0;
+    validOrders.forEach((o) => {
+      revenueSum += Number(o.order_amount) || 0;
+      netSum += o.net_revenue != null && (subtotalByOrder.get(o.id) || 0) > 0 ? Number(o.net_revenue) : estimatedNet.get(o.id) ?? (Number(o.net_revenue) || 0);
+    });
+    const ad = sumInRange(ads, range.from, range.to);
+    const exp = sumInRange(expenses, range.from, range.to);
+    const headline: Headline = {
+      order_count: validOrders.size,
+      total_revenue: revenueSum,
+      total_net_revenue: netSum,
+      total_cogs: cogs,
+      gross_profit: netSum - cogs,
+      total_ad_cost: ad,
+      total_expenses: exp,
+      net_profit: netSum - cogs - ad - exp,
+    };
+
+    const ranked: RankedProduct[] = [];
+    agg.forEach((a, id) => {
+      const p = productMap.get(id);
+      if (!p || a.qty <= 0) return;
+      const profit = a.revenue - a.cost;
+      ranked.push({
+        id,
+        product_name: p.product_name,
+        variant_name: p.variant_name,
+        product_image: p.product_image,
+        periodQty: a.qty,
+        revenue: a.revenue,
+        totalProfit: profit,
+        margin: a.revenue > 0 ? profit / a.revenue : 0,
+      });
+    });
+    return { headline, ranked };
+  }, [range, products, orders, items, ads, expenses]);
 
   const activeList = useMemo(() => {
     const sorted = [...ranked].sort((a, b) => (rankTab === "top" ? b.totalProfit - a.totalProfit : a.totalProfit - b.totalProfit));
@@ -305,7 +321,10 @@ function InsightsPageContent() {
             {/* 損益卡（A9：桌機 1280 首屏含本月營收／毛利，金額全千分位）——標題與數字
                 跟著上面「期間篩選」pills 走，見 headline useMemo */}
             <section className="rounded-2xl border border-[#EAEAEA] p-5">
-              <p className="text-xs font-medium text-[#8F8F8F] mb-3">{headlineTitle}</p>
+              <p className="text-xs font-medium text-[#8F8F8F] mb-3">
+                {headlineTitle}
+                {range && <span className="ml-1.5 text-[#B0B0B0]">{range.from.slice(5).replace("-", "/")}～{range.to.slice(5).replace("-", "/")}</span>}
+              </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <p className="text-2xl sm:text-3xl font-semibold text-[#171717] tabular-nums">
@@ -339,8 +358,7 @@ function InsightsPageContent() {
             </section>
 
             {/* 月度趨勢（固定近 6 個月，不受上面期間篩選影響——見 PRD §5「月度趨勢」與
-                「商品排行期間篩選」是兩個獨立需求，monthly 抓 14 個月是為了損益卡自訂區間
-                查得到更早的月份，這裡仍只切最新 6 個月畫圖） */}
+                「商品排行期間篩選」是兩個獨立需求；損益卡與排行改用原始訂單即時算，這裡只切最新 6 個月畫圖） */}
             <section className="rounded-2xl border border-[#EAEAEA] p-5">
               <p className="text-xs font-medium text-[#8F8F8F] mb-3">近 6 個月營收／淨利</p>
               <MonthlyTrendChart data={monthly.slice(0, 6)} />

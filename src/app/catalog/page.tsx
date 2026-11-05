@@ -114,7 +114,7 @@ function CatalogHome() {
         unit_cost_ntd: form.unit_cost_ntd ?? null,
         weight_kg: form.weight_kg ?? null,
         safety_stock: form.safety_stock ?? null,
-        product_status: form.product_status || "測品",
+        product_status: form.product_status || "常駐",
         product_positioning: form.product_positioning || "一般款",
         notes: form.notes || null,
       });
