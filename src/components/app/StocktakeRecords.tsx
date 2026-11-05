@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 // 盤點紀錄回查（PRD §4.3、A14「差異清單留檔可查」）。資料源是 stock_snapshots——每次盤點
 // 對「有輸入實際數量」的品項都各寫一筆（不論有無差異），note 已含人話版「帳上 X → 實際 Y」，
 // 所以這裡不用回頭 join inventory_ledger 也能還原完整故事。
@@ -84,9 +86,9 @@ export function StocktakeRecords() {
   return (
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
-        <a href="/stock" className="inline-flex items-center gap-1 text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150 mb-2">
+        <Link href="/stock" className="inline-flex items-center gap-1 text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150 mb-2">
           ‹ 返回庫存
-        </a>
+        </Link>
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">盤點紀錄</h1>
         <p className="text-sm text-[#8F8F8F] mt-0.5">共 {sessions.length} 次盤點</p>
       </header>
@@ -97,7 +99,7 @@ export function StocktakeRecords() {
         ) : sessions.length === 0 ? (
           <div className="rounded-2xl border border-[#EAEAEA] p-8 text-center">
             <p className="text-sm text-[#8F8F8F]">還沒有盤點紀錄</p>
-            <a href="/stock?stocktake=1" className="text-[#0070F3] text-sm underline mt-2 inline-block">開始第一次盤點</a>
+            <Link href="/stock?stocktake=1" className="text-[#0070F3] text-sm underline mt-2 inline-block">開始第一次盤點</Link>
           </div>
         ) : (
           <div className="space-y-2 app-fade-up-enter">

@@ -40,7 +40,8 @@ export function ProductFormSheet({
     }
   };
 
-  const Field = ({
+  // 用一般函式產生欄位，不要在元件裡宣告元件：後者每次重繪都是新元件，輸入框會被重建、每打一個字就失焦。
+  const renderField = ({
     label,
     field,
     type = "text",
@@ -83,10 +84,10 @@ export function ProductFormSheet({
         </div>
 
         <div className="space-y-3">
-          <Field label="商品名稱 *" field="product_name" placeholder="例：矽藻土杯墊" />
+          {renderField({ label: "商品名稱 *", field: "product_name", placeholder: "例：矽藻土杯墊" })}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="SKU" field="sku" placeholder="YW-..." />
-            <Field label="款式名稱" field="variant_name" placeholder="例：圓形-大理石紋" />
+            {renderField({ label: "SKU", field: "sku", placeholder: "YW-..." })}
+            {renderField({ label: "款式名稱", field: "variant_name", placeholder: "例：圓形-大理石紋" })}
           </div>
           <div>
             <label className="block text-xs font-medium text-[#171717] mb-1">分類</label>
@@ -104,12 +105,12 @@ export function ProductFormSheet({
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="售價（NTD）" field="selling_price" type="number" />
-            <Field label="進貨價（CNY）" field="purchase_price_cny" type="number" />
+            {renderField({ label: "售價（NTD）", field: "selling_price", type: "number" })}
+            {renderField({ label: "進貨價（CNY）", field: "purchase_price_cny", type: "number" })}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="重量（kg）" field="weight_kg" type="number" />
-            <Field label="安全庫存" field="safety_stock" type="number" />
+            {renderField({ label: "重量（kg）", field: "weight_kg", type: "number" })}
+            {renderField({ label: "安全庫存", field: "safety_stock", type: "number" })}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -137,7 +138,7 @@ export function ProductFormSheet({
               </select>
             </div>
           </div>
-          <Field label="備註" field="notes" placeholder="選填" />
+          {renderField({ label: "備註", field: "notes", placeholder: "選填" })}
         </div>
 
         {error && <p className="text-[#E00] text-sm mt-3">{error}</p>}

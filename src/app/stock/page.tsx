@@ -12,6 +12,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { LoadError, errorMessage } from "@/components/app/LoadError";
 import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
 import { RequireAuth } from "@/components/app/RequireAuth";
@@ -57,10 +58,13 @@ function CategorySelectionList() {
   const [categories, setCategories] = useState<CategoryCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [resumeCategory, setResumeCategory] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
+      setLoadError(null);
       try {
         const { data, error } = await getSupabase().from("products").select("category, product_status");
         if (error) throw error;
@@ -72,6 +76,8 @@ function CategorySelectionList() {
             map.set(cat, (map.get(cat) || 0) + 1);
           });
         setCategories(Array.from(map, ([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count));
+      } catch (e) {
+        setLoadError(errorMessage(e));
       } finally {
         setLoading(false);
       }
@@ -90,7 +96,7 @@ function CategorySelectionList() {
     } catch {
       // localStorage 不可用忽略
     }
-  }, []);
+  }, [reloadKey]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -113,7 +119,9 @@ function CategorySelectionList() {
           </Link>
         )}
 
-        {loading ? (
+        {loadError && !loading ? (
+          <LoadError message={loadError} onRetry={() => setReloadKey((k) => k + 1)} />
+        ) : loading ? (
           <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
         ) : (
           <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden app-fade-up-enter">

@@ -17,7 +17,8 @@
 //     既有 StockAdjustSheet REASONS 已有的 "盤點修正"（不發明新枚舉值）。這是唯一真的會改變
 //     stock_qty 的寫入（stock_qty 是 v_products_with_stock 對 ledger 的聚合，products 表本身
 //     沒有這欄）。
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
@@ -39,9 +40,19 @@ type FlowItem = {
 
 type Phase = "loading" | "items" | "summary" | "submitting" | "done" | "error" | "empty";
 
+// 草稿超過這個時間就不續用：帳上數早已變了，舊的點數套到現在會算錯
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function newRef(): string {
+  return `ST-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 type Draft = {
   category: string;
   currentIndex: number;
+  // 這次盤點的送出代號：同一次盤點重送（斷線後再按）資料庫會認出來，不會重複調整
+  ref?: string;
+  savedAt?: number;
   items: { id: number; actual_qty: number; touched: boolean; seen_qty?: number }[];
 };
 
@@ -57,11 +68,15 @@ export function StocktakeFlow({ category }: { category: string }) {
   const [items, setItems] = useState<FlowItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  const refRef = useRef<string>(newRef());
+
   const persistDraft = useCallback(
     (idx: number, list: FlowItem[]) => {
       const draft: Draft = {
         category,
         currentIndex: idx,
+        ref: refRef.current,
+        savedAt: Date.now(),
         items: list.map((i) => ({ id: i.id, actual_qty: i.actual_qty, touched: i.touched, seen_qty: i.seen_qty })),
       };
       try {
@@ -106,7 +121,13 @@ export function StocktakeFlow({ category }: { category: string }) {
         const raw = localStorage.getItem(draftKey(category));
         if (raw) {
           const draft: Draft = JSON.parse(raw);
-          if (draft.category === category && draft.items.length === mapped.length) {
+          const fresh = typeof draft.savedAt === "number" && Date.now() - draft.savedAt < DRAFT_MAX_AGE_MS;
+          if (draft.category === category && !fresh) {
+            localStorage.removeItem(draftKey(category));
+            toast("上次沒盤完的草稿已超過一天，帳上數已經變了，這次從頭開始盤");
+          } else if (draft.category === category) {
+            // 依商品逐項對回（分類裡新增或刪掉商品時，其他商品的進度照樣保留）
+            if (draft.ref) refRef.current = draft.ref;
             mapped = mapped.map((item) => {
               const saved = draft.items.find((d) => d.id === item.id);
               // 還沒點過的項目用最新帳上數；點過的保留當時點到的數與當時看到的帳上數
@@ -114,7 +135,7 @@ export function StocktakeFlow({ category }: { category: string }) {
                 ? { ...item, actual_qty: saved.actual_qty, touched: true, seen_qty: saved.seen_qty ?? item.expected_qty }
                 : item;
             });
-            restoredIndex = Math.min(draft.currentIndex, mapped.length - 1);
+            restoredIndex = Math.max(0, Math.min(draft.currentIndex, mapped.length - 1));
           }
         }
       } catch {
@@ -180,6 +201,7 @@ export function StocktakeFlow({ category }: { category: string }) {
     setPhase("submitting");
     try {
       const { data, error } = await getSupabase().rpc("submit_stocktake", {
+        p_ref: refRef.current,
         p_items: items.map((item) => ({
           product_id: item.product_id,
           counted_qty: item.actual_qty,
@@ -194,7 +216,8 @@ export function StocktakeFlow({ category }: { category: string }) {
       setTimeout(() => router.push("/stock"), 900);
     } catch (e) {
       const msg = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
-      toast(msg ? `盤點送出失敗，資料沒有寫入：${msg}` : "盤點送出失敗，資料沒有寫入，可以再試一次", "error");
+      // 送出可能其實已經寫入、只是回覆沒傳回來；再按一次用同一個送出代號，資料庫不會重複調整
+      toast(msg ? `盤點送出沒有完成（${msg}），可以直接再按一次，不會重複記` : "盤點送出沒有完成，可以直接再按一次，不會重複記", "error");
       setPhase("summary");
     }
   };
@@ -208,7 +231,7 @@ export function StocktakeFlow({ category }: { category: string }) {
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
         <div>
           <p className="text-[#E00] mb-3 text-sm">載入失敗</p>
-          <a href="/stock?stocktake=1" className="text-[#0070F3] text-sm underline">返回選擇分類</a>
+          <Link href="/stock?stocktake=1" className="text-[#0070F3] text-sm underline">返回選擇分類</Link>
         </div>
       </div>
     );
@@ -219,7 +242,7 @@ export function StocktakeFlow({ category }: { category: string }) {
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
         <div>
           <p className="text-sm text-[#8F8F8F] mb-3">「{category}」目前沒有可盤點的商品</p>
-          <a href="/stock?stocktake=1" className="text-[#0070F3] text-sm underline">返回選擇分類</a>
+          <Link href="/stock?stocktake=1" className="text-[#0070F3] text-sm underline">返回選擇分類</Link>
         </div>
       </div>
     );

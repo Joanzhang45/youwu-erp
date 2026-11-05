@@ -26,25 +26,35 @@ export function ReorderList() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState("");
 
-  const load = async () => {
-    setError("");
-    setRows(null);
-    const { data, error: err } = await getSupabase()
-      .from("v_reorder_suggestions")
-      .select("*")
-      .gt("suggest_qty", 0)
-      .order("days_left", { ascending: true, nullsFirst: false })
-      .order("suggest_qty", { ascending: false });
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    setRows((data || []) as Row[]);
-  };
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    load();
-  }, []);
+    let alive = true;
+    (async () => {
+      const { data, error: err } = await getSupabase()
+        .from("v_reorder_suggestions")
+        .select("*")
+        .gt("suggest_qty", 0)
+        .order("days_left", { ascending: true, nullsFirst: false })
+        .order("suggest_qty", { ascending: false });
+      if (!alive) return;
+      if (err) {
+        setError(err.message);
+        return;
+      }
+      setError("");
+      setRows((data || []) as Row[]);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [reloadKey]);
+
+  const retry = () => {
+    setError("");
+    setRows(null);
+    setReloadKey((k) => k + 1);
+  };
 
   const until = rows?.[0]?.sales_data_until;
 
@@ -65,7 +75,7 @@ export function ReorderList() {
           <div className="rounded-2xl border border-[#FFD6D6] bg-[#FFF5F5] p-5 text-center">
             <p className="text-sm font-medium text-[#C00]">資料沒有讀到</p>
             <p className="text-xs text-[#8F8F8F] mt-1 break-all">{error}</p>
-            <button onClick={load} className="mt-4 px-4 py-2 rounded-lg bg-[#171717] text-white text-sm font-medium">
+            <button onClick={retry} className="mt-4 px-4 py-2 rounded-lg bg-[#171717] text-white text-sm font-medium">
               重新讀取
             </button>
           </div>

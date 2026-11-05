@@ -291,11 +291,19 @@ function MappingTool() {
   const applyMapping = async (combo: UnmappedCombo, productId: number) => {
     setSaving(true);
     try {
-      let query = getSupabase().from("sales_order_items").update({ product_id: productId }).eq("product_name", combo.product_name);
-      query = combo.variant_name ? query.eq("variant_name", combo.variant_name) : query.is("variant_name", null);
-      const { error } = await query;
+      // 只改「還沒對應」的品項（已對應的同名品項不動）；款式空白可能存成空字串或 NULL，兩種都要涵蓋。
+      // 資料庫會跟著扣庫存、記成本（migration 016 的改對應觸發器），這裡不用另外寫庫存帳。
+      let query = getSupabase()
+        .from("sales_order_items")
+        .update({ product_id: productId })
+        .eq("product_name", combo.product_name)
+        .is("product_id", null);
+      query = combo.variant_name ? query.eq("variant_name", combo.variant_name) : query.or("variant_name.is.null,variant_name.eq.");
+      const { data, error } = await query.select("id");
       if (error) throw error;
-      toast(`已對應 ${combo.count} 筆訂單品項`);
+      const n = data?.length ?? 0;
+      if (n === 0) throw new Error("沒有找到要對應的品項，可能已經被對應過了，重新整理看看");
+      toast(`已對應 ${n} 筆訂單品項，庫存與成本已跟著更新`);
       setExpandedKey(null);
       fetchTool();
     } catch (e) {

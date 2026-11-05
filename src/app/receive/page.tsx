@@ -6,6 +6,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { LoadError, errorMessage } from "@/components/app/LoadError";
 import type { ConsolidatedShipment } from "@/lib/database.types";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { ReceivingFlow } from "@/components/app/ReceivingFlow";
@@ -43,10 +44,12 @@ function ShipmentSelectionList() {
   const [shipments, setShipments] = useState<ConsolidatedShipment[]>([]);
   const [itemCounts, setItemCounts] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchShipments = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const supabase = getSupabase();
       const { data, error } = await supabase
         .from("consolidated_shipments")
@@ -58,18 +61,20 @@ function ShipmentSelectionList() {
       setShipments(list);
 
       if (list.length > 0) {
-        const { data: items } = await supabase
+        const { data: items, error: itemsErr } = await supabase
           .from("consolidated_shipment_items")
           .select("id, shipment_id")
           .in("shipment_id", list.map((s) => s.id));
+        if (itemsErr) throw itemsErr;
         const counts: Record<number, number> = {};
         for (const i of items || []) {
           counts[i.shipment_id] = (counts[i.shipment_id] || 0) + 1;
         }
         setItemCounts(counts);
       }
-    } catch {
+    } catch (e) {
       setShipments([]);
+      setLoadError(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -87,7 +92,9 @@ function ShipmentSelectionList() {
       </header>
 
       <main className="px-5 max-w-2xl mx-auto pb-8">
-        {loading ? (
+        {loadError && !loading ? (
+          <LoadError message={loadError} onRetry={fetchShipments} />
+        ) : loading ? (
           <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
         ) : shipments.length === 0 ? (
           <div className="rounded-2xl border border-[#EAEAEA] p-8 text-center">

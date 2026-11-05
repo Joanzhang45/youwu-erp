@@ -6,6 +6,7 @@
 // 這支檔案把「一張採購單 → 多筆物流／多個集運批次 → 對應點收紀錄」的聚合查詢與狀態判斷
 // 集中在一處，同時餵給列表頁（批次算 5 節點目前進度）與詳情頁（完整節點明細）。
 import { getSupabase } from "@/lib/supabase";
+import { fetchAllRows } from "@/lib/fetchAll";
 import type {
   ConsolidatedShipment,
   ConsolidatedShipmentItem,
@@ -51,24 +52,28 @@ export async function fetchInboundChain(poNumbers: string[]): Promise<InboundCha
   if (cleanNumbers.length === 0) return emptyChain();
 
   const supabase = getSupabase();
-  const [logRes, shipItemRes] = await Promise.all([
-    supabase.from("domestic_logistics").select("*").in("po_number", cleanNumbers),
-    supabase.from("consolidated_shipment_items").select("*").in("po_number", cleanNumbers),
+  // 任何一個查詢失敗都要丟出來，不能當成「沒有物流／沒有集運」：
+  // 畫面會依此決定能不能取消採購單，讀錯成空的就可能取消一張貨還在路上的單（2026-11-06 第二次健檢）。
+  const [logRows, shipItems] = await Promise.all([
+    fetchAllRows<DomesticLogistics>(() => supabase.from("domestic_logistics").select("*").in("po_number", cleanNumbers)),
+    fetchAllRows<ConsolidatedShipmentItem>(() =>
+      supabase.from("consolidated_shipment_items").select("*").in("po_number", cleanNumbers)
+    ),
   ]);
 
   const logisticsByPo = new Map<string, DomesticLogistics[]>();
-  for (const row of logRes.data || []) {
+  for (const row of logRows) {
     if (!row.po_number) continue;
     const list = logisticsByPo.get(row.po_number) || [];
     list.push(row);
     logisticsByPo.set(row.po_number, list);
   }
 
-  const shipItems = shipItemRes.data || [];
   const shipmentIds = Array.from(new Set(shipItems.map((r) => r.shipment_id)));
   let shipmentsById = new Map<number, ConsolidatedShipment>();
   if (shipmentIds.length > 0) {
-    const { data: shipData } = await supabase.from("consolidated_shipments").select("*").in("id", shipmentIds);
+    const { data: shipData, error: shipErr } = await supabase.from("consolidated_shipments").select("*").in("id", shipmentIds);
+    if (shipErr) throw new Error(shipErr.message);
     shipmentsById = new Map((shipData || []).map((s) => [s.id, s]));
   }
 
@@ -98,10 +103,11 @@ export async function fetchInboundChain(poNumbers: string[]): Promise<InboundCha
     new Set(Array.from(shipmentsById.values()).map((s) => s.shipment_number).filter(Boolean) as string[])
   );
   if (shipmentNumbers.length > 0) {
-    const { data: rvData } = await supabase
+    const { data: rvData, error: rvErr } = await supabase
       .from("receiving_records")
       .select("*")
       .in("shipment_number", shipmentNumbers);
+    if (rvErr) throw new Error(rvErr.message);
     for (const rv of rvData || []) {
       if (rv.shipment_number) receivingByShipmentNumber.set(rv.shipment_number, rv);
     }

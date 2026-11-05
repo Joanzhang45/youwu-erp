@@ -8,6 +8,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { LoadError, errorMessage } from "@/components/app/LoadError";
 import type { PurchaseOrder } from "@/lib/database.types";
 import { computeStageIndex, fetchInboundChain, STAGE_LABELS, type InboundChain } from "@/lib/inboundData";
 import { RequireAuth } from "@/components/app/RequireAuth";
@@ -52,6 +53,7 @@ function InboundHome() {
     receivingByShipmentNumber: new Map(),
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<PurchaseOrder[]>([]);
@@ -62,6 +64,7 @@ function InboundHome() {
 
   const fetchActive = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const supabase = getSupabase();
       const { data, error } = await supabase
@@ -75,8 +78,9 @@ function InboundHome() {
       const list = data || [];
       setActive(list);
       setChain(await fetchInboundChain(list.map((p) => p.po_number)));
-    } catch {
+    } catch (e) {
       setActive([]);
+      setLoadError(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -141,6 +145,8 @@ function InboundHome() {
       <main className="px-5 max-w-2xl mx-auto pb-24">
         {loading ? (
           <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+        ) : loadError ? (
+          <LoadError message={loadError} onRetry={fetchActive} />
         ) : active.length === 0 ? (
           <div className="rounded-2xl border border-[#EAEAEA] p-6 text-center">
             <p className="text-sm text-[#8F8F8F]">目前沒有進行中的採購單</p>

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
+import { LoadError, errorMessage } from "@/components/app/LoadError";
 import { useToast } from "@/components/Toast";
 import type { CompetitorProduct, ProductSelection, ProductVariant } from "@/lib/database.types";
 import { ChevronRightIcon, CheckIcon, PlusIcon } from "./icons";
@@ -39,6 +40,7 @@ export function SelectionCandidatesSection() {
   const { toast } = useToast();
   const [selections, setSelections] = useState<ProductSelection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("全部");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [showAdd, setShowAdd] = useState(false);
@@ -46,6 +48,7 @@ export function SelectionCandidatesSection() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       // 選品評估是低頻動作（PRD §2.3：進貨重啟前低頻），實測全量僅 99 筆，遠低於長牆病門檻，
       // 一次抓全量＋前端分頁即可，不需要伺服器端 range() 分頁的額外複雜度。
       const { data, error } = await getSupabase()
@@ -55,8 +58,9 @@ export function SelectionCandidatesSection() {
         .limit(500);
       if (error) throw error;
       setSelections(data || []);
-    } catch {
+    } catch (e) {
       setSelections([]);
+      setLoadError(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -127,7 +131,9 @@ export function SelectionCandidatesSection() {
         ))}
       </div>
 
-      {loading ? (
+      {loadError && !loading ? (
+        <LoadError message={loadError} onRetry={fetchData} />
+      ) : loading ? (
         <div className="text-center py-8 text-[#8F8F8F] text-sm">載入中...</div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-[#EAEAEA] p-6 text-center">

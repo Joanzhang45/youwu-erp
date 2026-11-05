@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
+import { LoadError, errorMessage } from "@/components/app/LoadError";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { LogisticsCreateSheet, PurchaseOrderEditSheet, ShipmentCostSheet, ShipmentCreateSheet } from "./InboundSheets";
@@ -73,6 +74,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const [logisticsExpanded, setLogisticsExpanded] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<
     { kind: "edit" } | { kind: "logistics" } | { kind: "shipment" } | { kind: "cost"; shipmentId: number } | null
   >(null);
@@ -81,6 +83,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setNotFound(false);
+    setLoadError(null);
     try {
       const supabase = getSupabase();
       const [poRes, itemsRes] = await Promise.all([
@@ -91,6 +94,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
         setNotFound(true);
         return;
       }
+      if (itemsRes.error) throw itemsRes.error;
       setPo(poRes.data);
       setItems(itemsRes.data || []);
 
@@ -101,11 +105,12 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
         receivingByShipmentNumber: full.receivingByShipmentNumber,
       });
     } catch (e) {
-      toast(e instanceof Error ? e.message : "載入失敗", "error");
+      // 物流／集運沒讀到時不能顯示半套頁面：會出現「取消採購單」而貨其實在路上
+      setLoadError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [poId, toast]);
+  }, [poId]);
 
   useEffect(() => {
     fetchAll();
@@ -140,14 +145,12 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
     if (!ok) return;
     setBusyKey("cancel");
     try {
-      const { data, error } = await getSupabase()
-        .from("purchase_orders")
-        .update({ status_cancelled: true, status: "cancelled" })
-        .eq("id", po.id)
-        .eq("status_received", false)
-        .select("id");
-      if (error) throw error;
-      if (!data || data.length === 0) throw new Error("這張採購單已經到貨點收，不能取消");
+      const { error } = await getSupabase().rpc("cancel_purchase_order", { p_po_id: po.id });
+      if (error) {
+        if (error.message.includes("HAS_SHIPMENTS")) throw new Error("這張採購單已經有集運批次，不能取消");
+        if (error.message.includes("PO_RECEIVED")) throw new Error("這張採購單已經到貨點收，不能取消");
+        throw error;
+      }
       toast("已取消採購單");
       fetchAll();
     } catch (e) {
@@ -246,6 +249,19 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen p-6 max-w-2xl mx-auto">
+        <Link href="/inbound" className="text-xs text-[#0070F3] hover:underline">
+          ← 進貨
+        </Link>
+        <div className="mt-6">
+          <LoadError message={loadError} onRetry={fetchAll} />
+        </div>
+      </div>
+    );
   }
 
   if (notFound || !po) {

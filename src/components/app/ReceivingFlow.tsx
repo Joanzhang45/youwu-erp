@@ -3,12 +3,14 @@
 // 到貨點收核心流程（PRD §4.2）。畫面在這裡；寫入與落地成本公式在資料庫函式 receive_shipment
 // （supabase/migrations/012_cost_snapshot_and_atomic_flows.sql）。
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import type { ConsolidatedShipment } from "@/lib/database.types";
 import { CameraIcon, CheckIcon } from "./icons";
 import { uploadReceivingPhoto } from "./ReceivingPhotos";
+import { ShipmentCostSheet } from "./InboundSheets";
 
 type Condition = "良好" | "異常";
 
@@ -28,7 +30,7 @@ type FlowItem = {
   photo_path: string | null;
 };
 
-type Phase = "loading" | "items" | "summary" | "submitting" | "done" | "error" | "received";
+type Phase = "loading" | "items" | "summary" | "submitting" | "done" | "error" | "received" | "needcost";
 
 type Draft = {
   shipmentId: number;
@@ -58,6 +60,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [costOpen, setCostOpen] = useState(false);
 
   const persistDraft = useCallback(
     (idx: number, list: FlowItem[]) => {
@@ -97,6 +100,12 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
       if (shipData.status === "已驗收" || shipData.status === "已入庫") {
         setShipment(shipData);
         setPhase("received");
+        return;
+      }
+      // 總重或總運費沒填，點完也送不出去（運費沒辦法分攤）：一打開就先請使用者補上
+      if (!(Number(shipData.total_weight_kg) > 0) || shipData.total_cost_ntd == null) {
+        setShipment(shipData);
+        setPhase("needcost");
         return;
       }
 
@@ -245,12 +254,47 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
     return <div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>;
   }
 
+  if (phase === "needcost" && shipment) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 text-center">
+        <div className="max-w-sm">
+          <p className="text-[#171717] font-medium mb-1">先補這批貨的總重和運費</p>
+          <p className="text-sm text-[#8F8F8F] mb-4">
+            {shipment.shipment_number} 還沒填{!(Number(shipment.total_weight_kg) > 0) ? "總重" : ""}
+            {!(Number(shipment.total_weight_kg) > 0) && shipment.total_cost_ntd == null ? "和" : ""}
+            {shipment.total_cost_ntd == null ? "總運費" : ""}，運費要按重量分到每件商品的成本，補好才能點收。
+          </p>
+          <button
+            onClick={() => setCostOpen(true)}
+            className="w-full py-3.5 rounded-xl text-white font-semibold text-base bg-[#171717] active:scale-[0.98] transition-transform duration-150"
+          >
+            現在補上
+          </button>
+          <Link href="/receive" className="block mt-3 text-[#0070F3] text-sm underline">
+            先回點收清單
+          </Link>
+        </div>
+        {costOpen && (
+          <ShipmentCostSheet
+            shipment={shipment}
+            onClose={() => setCostOpen(false)}
+            onSaved={() => {
+              setCostOpen(false);
+              toast("已補上，可以開始點收");
+              fetchData();
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   if (phase === "received") {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
         <div>
           <p className="text-[#171717] mb-3 text-sm">這批貨已經點收過了</p>
-          <a href="/receive" className="text-[#0070F3] text-sm underline">返回點收清單</a>
+          <Link href="/receive" className="text-[#0070F3] text-sm underline">返回點收清單</Link>
         </div>
       </div>
     );
@@ -261,7 +305,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
         <div>
           <p className="text-[#E00] mb-3 text-sm">找不到集運單</p>
-          <a href="/receive" className="text-[#0070F3] text-sm underline">返回點收清單</a>
+          <Link href="/receive" className="text-[#0070F3] text-sm underline">返回點收清單</Link>
         </div>
       </div>
     );
