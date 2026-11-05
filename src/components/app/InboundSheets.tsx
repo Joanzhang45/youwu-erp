@@ -11,6 +11,7 @@ const PO_ERRORS = {
   PO_LOCKED: "這張採購單已點收或已取消，不能再修改",
   BAD_RATE: "匯率要在 3 到 10 之間",
   NO_ITEMS_LEFT: "至少要留一個品項；整張不要了請用「取消採購單」",
+  BELOW_SHIPPED: "數量不能改到比已經排進集運的還少",
 };
 
 export function PurchaseOrderEditSheet({
@@ -36,6 +37,10 @@ export function PurchaseOrderEditSheet({
   const subtotal = rows.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.price) || 0), 0);
 
   const save = async () => {
+    if (rows.some((r) => r.price.trim() === "" || Number.isNaN(Number(r.price)) || r.qty.trim() === "" || Number.isNaN(Number(r.qty)))) {
+      setError("每個品項的數量和單價都要填數字");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -43,7 +48,7 @@ export function PurchaseOrderEditSheet({
         p_po_id: po.id,
         p: {
           order_date: orderDate,
-          cny_rate: Number(rate),
+          cny_rate: rate.trim() === "" ? null : Number(rate),
           notes,
           items: rows.map((r) => ({ id: r.id, qty: Math.max(0, Math.round(Number(r.qty) || 0)), unit_price_cny: Number(r.price) || 0 })),
         },
@@ -231,7 +236,13 @@ export function ShipmentCreateSheet({
       if (err) throw err;
       onSaved(String((data as { shipment_number?: string } | null)?.shipment_number || ""));
     } catch (e) {
-      setError(errorText(e, { PO_CANCELLED: "這張採購單已取消", ITEM_NOT_LINKED: "有品項沒對到商品，不能排進集運" }));
+      setError(
+        errorText(e, {
+          PO_CLOSED: "這張採購單已結案或已取消",
+          ITEM_NOT_LINKED: "有品項沒對到商品，不能排進集運",
+          OVER_SHIPPED: "排的數量超過還沒寄的數量",
+        })
+      );
       setBusy(false);
     }
   };
@@ -302,7 +313,9 @@ export function ShipmentCreateSheet({
         ))}
       </div>
       {unlinked.length > 0 && (
-        <p className="text-[11px] text-[#8F8F8F] mb-3">沒對到商品的品項不能排進集運（點收時不會進庫存），要先到商品頁對應。</p>
+        <p className="text-[11px] text-[#8F8F8F] mb-3">
+          沒對到商品的品項不能排進集運（點收時不會進庫存）。這些貨到了以後，用庫存頁的「入庫」手動加庫存，再按採購單上的「貨都到齊了，結案」。
+        </p>
       )}
       {error && <p className="text-[#E00] text-sm mb-3">{error}</p>}
       <SubmitButton busy={busy} onClick={save}>
@@ -340,12 +353,14 @@ export function ShipmentCostSheet({
     setBusy(true);
     setError("");
     try {
-      const { error: err } = await getSupabase()
+      const { data, error: err } = await getSupabase()
         .from("consolidated_shipments")
         .update({ total_weight_kg: w, total_cost_ntd: c })
         .eq("id", shipment.id)
-        .not("status", "in", "(已驗收,已入庫)");
+        .not("status", "in", "(已驗收,已入庫)")
+        .select("id");
       if (err) throw err;
+      if (!data || data.length === 0) throw new Error("這批貨已經點收了，總重和運費不能再改");
       onSaved();
     } catch (e) {
       setError(errorText(e));

@@ -423,7 +423,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
         <div className="mb-4">
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => updateCurrent({ condition: "良好" })}
+              onClick={() => { updateCurrent({ condition: "良好", photo_path: null }); setPhotoPreview(null); }}
               className={`py-3 rounded-xl text-sm font-medium border transition-colors duration-150 ${
                 current.condition === "良好"
                   ? "bg-[#0CCE6B]/10 border-[#0CCE6B] text-[#0CCE6B]"
@@ -463,7 +463,10 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={(e) => handlePhoto(e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  handlePhoto(e.target.files?.[0] || null);
+                  e.target.value = "";
+                }}
               />
             </label>
             {!photoPreview && current.photo_path && <p className="mt-2 text-xs text-[#0CCE6B]">這一項已經有照片了</p>}

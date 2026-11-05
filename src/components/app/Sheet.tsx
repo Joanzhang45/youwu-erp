@@ -5,11 +5,9 @@ import type { ReactNode } from "react";
 
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div
-        className="bg-white w-full max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-[#EAEAEA] p-5 app-sheet-enter"
-        onClick={(e) => e.stopPropagation()}
-      >
+    // 點背景不關閉：手機上誤觸會把填到一半的表單整個丟掉，只能按右上角 × 關
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center">
+      <div className="bg-white w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-[#EAEAEA] p-5 app-sheet-enter">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-[#171717]">{title}</h2>
           <button

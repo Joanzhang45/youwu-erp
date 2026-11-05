@@ -158,12 +158,53 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
   };
 
   const shippedQtyByItem = useMemo(() => {
-    // 已排進集運的數量：同商品編號累加，對回採購單品項（舊集運品項沒有商品編號，算不到就當 0）
+    // 已排進集運的數量：先依商品編號加總（只算這張採購單的集運品項），再依序分給同商品的各行，
+    // 一行填滿才輪到下一行，同商品分兩行時不會每行都被算成全部已寄。舊集運品項沒有商品編號，算 0。
     const byProduct = new Map<number, number>();
     for (const g of chain.shipmentGroups)
-      for (const it of g.items) if (it.product_id) byProduct.set(it.product_id, (byProduct.get(it.product_id) || 0) + (it.qty || 0));
-    return new Map(items.map((i) => [i.id, i.product_id ? byProduct.get(i.product_id) || 0 : 0]));
-  }, [chain.shipmentGroups, items]);
+      for (const it of g.items)
+        if (it.product_id && it.po_number === po?.po_number)
+          byProduct.set(it.product_id, (byProduct.get(it.product_id) || 0) + (it.qty || 0));
+    const result = new Map<number, number>();
+    for (const i of items) {
+      if (!i.product_id) {
+        result.set(i.id, 0);
+        continue;
+      }
+      const left = byProduct.get(i.product_id) || 0;
+      const take = Math.min(left, i.qty || 0);
+      result.set(i.id, take);
+      byProduct.set(i.product_id, left - take);
+    }
+    return result;
+  }, [chain.shipmentGroups, items, po?.po_number]);
+
+  const closePo = async () => {
+    if (!po) return;
+    const ok = await confirm({
+      title: "貨都到齊了，結案？",
+      message: "結案後這張採購單會移到進貨的歷史區，不再算在「已叫貨還沒到」裡。",
+      confirmText: "結案",
+    });
+    if (!ok) return;
+    setBusyKey("close");
+    try {
+      const { data, error } = await getSupabase()
+        .from("purchase_orders")
+        .update({ status_received: true, status: "received" })
+        .eq("id", po.id)
+        .eq("status_cancelled", false)
+        .select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error("這張採購單已取消，不能結案");
+      toast("已結案");
+      fetchAll();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "結案失敗", "error");
+    } finally {
+      setBusyKey(null);
+    }
+  };
 
   const advanceLogistics = async (record: DomesticLogistics) => {
     const step = record.status ? LOGISTICS_NEXT[record.status] : undefined;
@@ -254,13 +295,23 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
             >
               修改採購單
             </button>
-            <button
-              onClick={cancelPo}
-              disabled={busyKey === "cancel"}
-              className="min-h-11 px-3 rounded-lg bg-white border border-[#EAEAEA] text-xs font-medium text-[#E00] hover:border-[#E00] disabled:opacity-50"
-            >
-              {busyKey === "cancel" ? "處理中..." : "取消採購單"}
-            </button>
+            {chain.shipmentGroups.length === 0 ? (
+              <button
+                onClick={cancelPo}
+                disabled={busyKey === "cancel"}
+                className="min-h-11 px-3 rounded-lg bg-white border border-[#EAEAEA] text-xs font-medium text-[#E00] hover:border-[#E00] disabled:opacity-50"
+              >
+                {busyKey === "cancel" ? "處理中..." : "取消採購單"}
+              </button>
+            ) : (
+              <button
+                onClick={closePo}
+                disabled={busyKey === "close"}
+                className="min-h-11 px-3 rounded-lg bg-white border border-[#EAEAEA] text-xs font-medium text-[#171717] hover:border-[#171717] disabled:opacity-50"
+              >
+                {busyKey === "close" ? "處理中..." : "貨都到齊了，結案"}
+              </button>
+            )}
           </div>
         )}
       </header>
