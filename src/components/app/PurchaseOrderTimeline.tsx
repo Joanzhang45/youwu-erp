@@ -7,10 +7,13 @@
 // 資料層考古：一張採購單可能對到「多筆」境內物流與「多個」集運批次（po_number 文字比對，非 1:1，
 // 見 src/lib/inboundData.ts 開頭註解）。物流筆數 ≤4 時逐筆給推進按鈕；超過門檻只給彙總＋可展開明細
 // （不逐筆給按鈕），避免歷史批次資料把時間軸炸成按鈕長牆，違背改版反長牆病的初衷。
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { LogisticsCreateSheet, PurchaseOrderEditSheet, ShipmentCostSheet, ShipmentCreateSheet } from "./InboundSheets";
+import { ReceivingPhotos } from "./ReceivingPhotos";
 import type { DomesticLogistics, PurchaseOrder, PurchaseOrderItem, ReceivingRecord } from "@/lib/database.types";
 import {
   computeStageIndex,
@@ -70,6 +73,10 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const [logisticsExpanded, setLogisticsExpanded] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<
+    { kind: "edit" } | { kind: "logistics" } | { kind: "shipment" } | { kind: "cost"; shipmentId: number } | null
+  >(null);
+  const { confirm } = useConfirm();
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -121,6 +128,42 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
       setBusyKey(null);
     }
   };
+
+  const cancelPo = async () => {
+    if (!po) return;
+    const ok = await confirm({
+      title: "取消這張採購單？",
+      message: "取消後會移到進貨的歷史區，不能再修改或排集運。已經排進集運的貨不受影響。",
+      confirmText: "取消採購單",
+      danger: true,
+    });
+    if (!ok) return;
+    setBusyKey("cancel");
+    try {
+      const { data, error } = await getSupabase()
+        .from("purchase_orders")
+        .update({ status_cancelled: true, status: "cancelled" })
+        .eq("id", po.id)
+        .eq("status_received", false)
+        .select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error("這張採購單已經到貨點收，不能取消");
+      toast("已取消採購單");
+      fetchAll();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "取消失敗", "error");
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const shippedQtyByItem = useMemo(() => {
+    // 已排進集運的數量：同商品編號累加，對回採購單品項（舊集運品項沒有商品編號，算不到就當 0）
+    const byProduct = new Map<number, number>();
+    for (const g of chain.shipmentGroups)
+      for (const it of g.items) if (it.product_id) byProduct.set(it.product_id, (byProduct.get(it.product_id) || 0) + (it.qty || 0));
+    return new Map(items.map((i) => [i.id, i.product_id ? byProduct.get(i.product_id) || 0 : 0]));
+  }, [chain.shipmentGroups, items]);
 
   const advanceLogistics = async (record: DomesticLogistics) => {
     const step = record.status ? LOGISTICS_NEXT[record.status] : undefined;
@@ -185,6 +228,9 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
     .sort()
     .slice(-1)[0];
   const logisticsDoneCount = chain.logistics.filter((l) => isLogisticsDone(l.status)).length;
+  const editable = !po.status_received && !po.status_cancelled;
+  const costShipment =
+    sheet?.kind === "cost" ? chain.shipmentGroups.find((x) => x.shipment.id === sheet.shipmentId)?.shipment : undefined;
   const totalCnySubtotal = items.reduce((sum, i) => sum + (Number(i.subtotal_cny) || 0), 0) || Number(po.subtotal_cny) || 0;
 
   return (
@@ -197,6 +243,26 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
         <p className="text-sm text-[#8F8F8F] mt-0.5">
           {po.order_date || "未設定日期"} · {po.purchaser || "未指定採購人"}
         </p>
+        {po.status_cancelled && (
+          <p className="mt-2 text-xs px-3 py-2 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] text-[#666666]">這張採購單已取消</p>
+        )}
+        {editable && (
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => setSheet({ kind: "edit" })}
+              className="min-h-11 px-3 rounded-lg bg-[#FAFAFA] border border-[#EAEAEA] text-xs font-medium text-[#171717] hover:border-[#171717]"
+            >
+              修改採購單
+            </button>
+            <button
+              onClick={cancelPo}
+              disabled={busyKey === "cancel"}
+              className="min-h-11 px-3 rounded-lg bg-white border border-[#EAEAEA] text-xs font-medium text-[#E00] hover:border-[#E00] disabled:opacity-50"
+            >
+              {busyKey === "cancel" ? "處理中..." : "取消採購單"}
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Blocker 修復（tester A10 R1）：底部固定 AppTabBar 高度約 64px，短內容的採購單
@@ -264,7 +330,14 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
 
           {/* 節點 2：境內物流 */}
           <TimelineStep index={1} stageIndex={stageIndex} last={false}>
-            <p className="text-sm font-semibold text-[#171717]">境內物流</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-[#171717]">境內物流</p>
+              {editable && (
+                <button onClick={() => setSheet({ kind: "logistics" })} className="text-xs text-[#0070F3] hover:underline">
+                  ＋ 新增包裹
+                </button>
+              )}
+            </div>
             {chain.logistics.length === 0 ? (
               <p className="text-xs text-[#8F8F8F] mt-1">尚未建立物流紀錄</p>
             ) : (
@@ -303,13 +376,26 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
 
           {/* 節點 3：集運 */}
           <TimelineStep index={2} stageIndex={stageIndex} last={false}>
-            <p className="text-sm font-semibold text-[#171717]">集運</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-[#171717]">集運</p>
+              {editable && items.length > 0 && (
+                <button onClick={() => setSheet({ kind: "shipment" })} className="text-xs text-[#0070F3] hover:underline">
+                  ＋ 建立集運批次
+                </button>
+              )}
+            </div>
             {chain.shipmentGroups.length === 0 ? (
               <p className="text-xs text-[#8F8F8F] mt-1">尚未建立集運批次</p>
             ) : (
               <div className="mt-2 space-y-2">
                 {chain.shipmentGroups.map((g) => (
-                  <ShipmentRow key={g.shipment.id} group={g} busy={busyKey === `ship-${g.shipment.id}`} onAdvance={() => advanceShipment(g)} />
+                  <ShipmentRow
+                    key={g.shipment.id}
+                    group={g}
+                    busy={busyKey === `ship-${g.shipment.id}`}
+                    onAdvance={() => advanceShipment(g)}
+                    onEditCost={() => setSheet({ kind: "cost", shipmentId: g.shipment.id })}
+                  />
                 ))}
               </div>
             )}
@@ -355,6 +441,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
                           <p className="text-[11px] text-[#8F8F8F] mt-0.5">
                             {rv.receiver || "-"} · {rv.receiving_date || "-"}
                           </p>
+                          <ReceivingPhotos receivingId={rv.id} />
                         </div>
                       </div>
                     );
@@ -381,6 +468,55 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
           </TimelineStep>
         </ol>
       </main>
+
+      {sheet?.kind === "edit" && (
+        <PurchaseOrderEditSheet
+          po={po}
+          items={items}
+          onClose={() => setSheet(null)}
+          onSaved={() => {
+            setSheet(null);
+            toast("已儲存採購單");
+            fetchAll();
+          }}
+        />
+      )}
+      {sheet?.kind === "logistics" && (
+        <LogisticsCreateSheet
+          poNumber={po.po_number}
+          defaultForwarder={po.forwarder}
+          onClose={() => setSheet(null)}
+          onSaved={() => {
+            setSheet(null);
+            toast("已新增包裹");
+            fetchAll();
+          }}
+        />
+      )}
+      {sheet?.kind === "shipment" && (
+        <ShipmentCreateSheet
+          po={po}
+          items={items}
+          shippedQtyByItem={shippedQtyByItem}
+          onClose={() => setSheet(null)}
+          onSaved={(num) => {
+            setSheet(null);
+            toast(`已建立集運批次 ${num}`);
+            fetchAll();
+          }}
+        />
+      )}
+      {sheet?.kind === "cost" && costShipment && (
+        <ShipmentCostSheet
+          shipment={costShipment}
+          onClose={() => setSheet(null)}
+          onSaved={() => {
+            setSheet(null);
+            toast("已更新總重與運費");
+            fetchAll();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -458,13 +594,17 @@ function ShipmentRow({
   group,
   busy,
   onAdvance,
+  onEditCost,
 }: {
   group: ShipmentGroup;
   busy: boolean;
   onAdvance: () => void;
+  onEditCost: () => void;
 }) {
   const s = group.shipment;
   const step = s.status ? SHIPMENT_NEXT[s.status] : undefined;
+  const received = s.status === "已驗收" || s.status === "已入庫";
+  const missingCost = !(Number(s.total_weight_kg) > 0) || s.total_cost_ntd == null;
   return (
     <div className="rounded-xl border border-[#EAEAEA] p-3">
       <div className="flex items-start justify-between gap-2">
@@ -474,7 +614,15 @@ function ShipmentRow({
             {s.forwarder || "-"} · {s.shipping_method || "-"} · {group.items.length} 個品項
           </p>
           {s.total_cost_ntd != null && Number(s.total_cost_ntd) > 0 && (
-            <p className="text-[11px] text-[#8F8F8F] mt-0.5">運費成本 NT${money(s.total_cost_ntd)}</p>
+            <p className="text-[11px] text-[#8F8F8F] mt-0.5">
+              運費成本 NT${money(s.total_cost_ntd)}
+              {Number(s.total_weight_kg) > 0 ? ` · ${s.total_weight_kg}kg` : ""}
+            </p>
+          )}
+          {!received && (
+            <button onClick={onEditCost} className={`text-[11px] mt-1 hover:underline ${missingCost ? "text-[#E00]" : "text-[#0070F3]"}`}>
+              {missingCost ? "還沒填總重或運費，點收前要補上" : "修改總重與運費"}
+            </button>
           )}
         </div>
         <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 font-medium ${STATUS_BADGE[s.status || ""] || ""}`}>

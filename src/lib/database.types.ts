@@ -237,6 +237,7 @@ export interface ReceivingRecordItem {
   discrepancy: number | null
   condition: string | null
   notes: string | null
+  photo_path?: string | null
 }
 
 // ============================================================

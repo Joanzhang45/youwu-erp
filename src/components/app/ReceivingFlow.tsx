@@ -8,6 +8,7 @@ import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import type { ConsolidatedShipment } from "@/lib/database.types";
 import { CameraIcon, CheckIcon } from "./icons";
+import { uploadReceivingPhoto } from "./ReceivingPhotos";
 
 type Condition = "良好" | "異常";
 
@@ -23,6 +24,8 @@ type FlowItem = {
   notes: string;
   purchase_price_cny: number | null;
   weight_kg: number | null;
+  // 已上傳到儲存區的異常照片路徑（送出點收時一起寫進點收品項）
+  photo_path: string | null;
 };
 
 type Phase = "loading" | "items" | "summary" | "submitting" | "done" | "error" | "received";
@@ -30,7 +33,7 @@ type Phase = "loading" | "items" | "summary" | "submitting" | "done" | "error" |
 type Draft = {
   shipmentId: number;
   currentIndex: number;
-  items: { id: number; actual_qty: number; condition: Condition; notes: string }[];
+  items: { id: number; actual_qty: number; condition: Condition; notes: string; photo_path?: string | null }[];
 };
 
 function receiveErrorText(e: unknown): string {
@@ -54,13 +57,14 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
   const [items, setItems] = useState<FlowItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const persistDraft = useCallback(
     (idx: number, list: FlowItem[]) => {
       const draft: Draft = {
         shipmentId,
         currentIndex: idx,
-        items: list.map((i) => ({ id: i.id, actual_qty: i.actual_qty, condition: i.condition, notes: i.notes })),
+        items: list.map((i) => ({ id: i.id, actual_qty: i.actual_qty, condition: i.condition, notes: i.notes, photo_path: i.photo_path })),
       };
       try {
         localStorage.setItem(draftKey(shipmentId), JSON.stringify(draft));
@@ -116,6 +120,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
           notes: "",
           purchase_price_cny: prod?.purchase_price_cny ?? null,
           weight_kg: item.weight_kg ?? prod?.weight_kg ?? null,
+          photo_path: null,
         };
       });
 
@@ -128,7 +133,9 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
           if (draft.shipmentId === shipmentId && draft.items.length === mapped.length) {
             mapped = mapped.map((item) => {
               const saved = draft.items.find((d) => d.id === item.id);
-              return saved ? { ...item, actual_qty: saved.actual_qty, condition: saved.condition, notes: saved.notes } : item;
+              return saved
+                ? { ...item, actual_qty: saved.actual_qty, condition: saved.condition, notes: saved.notes, photo_path: saved.photo_path ?? null }
+                : item;
             });
             restoredIndex = Math.min(draft.currentIndex, mapped.length - 1);
           }
@@ -181,14 +188,23 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
     persistDraft(prevIdx, items);
   };
 
-  const handlePhoto = (file: File | null) => {
-    if (!file) {
+  const handlePhoto = async (file: File | null) => {
+    if (!file || !current) {
       setPhotoPreview(null);
       return;
     }
-    // 僅本機預覽，不上傳（後端零動範圍內無 Storage bucket，見交付報告已知缺口）
-    const url = URL.createObjectURL(file);
-    setPhotoPreview(url);
+    setPhotoPreview(URL.createObjectURL(file));
+    setUploading(true);
+    try {
+      const path = await uploadReceivingPhoto(shipmentId, current.id, file);
+      updateCurrent({ photo_path: path });
+      toast("照片已上傳");
+    } catch (e) {
+      setPhotoPreview(null);
+      toast(e instanceof Error ? `照片上傳失敗：${e.message}` : "照片上傳失敗，請再拍一次", "error");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const diffCount = useMemo(() => items.filter((i) => i.actual_qty !== i.expected_qty).length, [items]);
@@ -202,7 +218,13 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
     try {
       const { data, error } = await getSupabase().rpc("receive_shipment", {
         p_shipment_id: shipmentId,
-        p_items: items.map((i) => ({ id: i.id, actual_qty: i.actual_qty, condition: i.condition, notes: i.notes || "" })),
+        p_items: items.map((i) => ({
+          id: i.id,
+          actual_qty: i.actual_qty,
+          condition: i.condition,
+          notes: i.notes || "",
+          photo_path: i.photo_path || "",
+        })),
       });
       if (error) throw error;
       const r = (data || {}) as { unlinked?: number; cost_skipped?: number };
@@ -423,7 +445,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
           </div>
         </div>
 
-        {/* 異常展開：備註＋拍照（拍照僅本機預覽，不上傳，見已知缺口） */}
+        {/* 異常展開：備註＋拍照（照片拍完立即上傳到私有儲存區，點收送出時與品項綁定） */}
         {current.condition === "異常" && (
           <div className="mb-4 app-fade-up-enter">
             <textarea
@@ -435,7 +457,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
             />
             <label className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-[#EAEAEA] text-sm text-[#666666] cursor-pointer hover:border-[#171717] transition-colors duration-150">
               <CameraIcon className="w-4 h-4" />
-              {photoPreview ? "重新拍照" : "拍照存證"}
+              {uploading ? "上傳中..." : photoPreview || current.photo_path ? "重新拍照" : "拍照存證"}
               <input
                 type="file"
                 accept="image/*"
@@ -444,6 +466,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
                 onChange={(e) => handlePhoto(e.target.files?.[0] || null)}
               />
             </label>
+            {!photoPreview && current.photo_path && <p className="mt-2 text-xs text-[#0CCE6B]">這一項已經有照片了</p>}
             {photoPreview && (
               <img src={photoPreview} alt="異常照片預覽" className="mt-2 w-full max-h-40 object-cover rounded-xl" />
             )}

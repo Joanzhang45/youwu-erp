@@ -21,6 +21,7 @@ type TodayData = {
     monthGrossProfit: number;
     monthNetProfit: number;
     outOfStock: number;
+    reorderCount: number;
     lowStock: number;
   };
   recent: ActivityRow[];
@@ -64,7 +65,7 @@ function TodayPageContent() {
       setLoading(true);
       setLoadError(null);
       const supabase = getSupabase();
-      const [shipRes, stockRes, monthRes, snapshotRes, ledgerRes] = await Promise.all([
+      const [shipRes, stockRes, monthRes, snapshotRes, ledgerRes, reorderRes] = await Promise.all([
         supabase
           .from("consolidated_shipments")
           .select("*")
@@ -83,10 +84,11 @@ function TodayPageContent() {
           .limit(3),
         supabase.from("stock_snapshots").select("snapshot_date").order("snapshot_date", { ascending: false }).limit(1),
         supabase.from("inventory_ledger").select("id, product_id, movement_type, qty_delta, note, occurred_at").order("occurred_at", { ascending: false }).limit(5),
+        supabase.from("v_reorder_suggestions").select("product_id", { count: "exact", head: true }).gt("suggest_qty", 0),
       ]);
 
       // 任何一個查詢失敗都要讓人看到，不能當成「沒資料」顯示全 0、今天沒有待辦（2026-11-05 健檢 #9）
-      const failed = [shipRes, stockRes, monthRes, snapshotRes, ledgerRes].find((r) => r.error);
+      const failed = [shipRes, stockRes, monthRes, snapshotRes, ledgerRes, reorderRes].find((r) => r.error);
       if (failed?.error) throw failed.error;
 
       // 排除停售/測品/季節款等非在售品項，只計「需要行動」的常駐/主力款缺貨與低庫存
@@ -153,6 +155,7 @@ function TodayPageContent() {
           monthGrossProfit: Math.round(Number(monthRow?.gross_profit) || 0),
           monthNetProfit: Math.round(Number(monthRow?.net_profit) || 0),
           outOfStock: outOfStockCount,
+          reorderCount: reorderRes.count ?? 0,
           lowStock: lowStockCount,
         },
         recent,
@@ -273,6 +276,20 @@ function TodayPageContent() {
               <div className="rounded-2xl border border-[#EAEAEA] p-6 text-center bg-white">
                 <p className="text-sm text-[#171717] font-medium">今天沒有待辦 👍</p>
               </div>
+            )}
+
+            {/* 補貨待辦（migration 014 v_reorder_suggestions） */}
+            {data && data.kpi.reorderCount > 0 && (
+              <Link
+                href="/stock?reorder=1"
+                className="flex items-center justify-between rounded-2xl border border-[#EAEAEA] p-4 hover:border-[#171717] transition-colors duration-150 bg-white"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-[#171717]">有 {data.kpi.reorderCount} 項商品該補貨了</p>
+                  <p className="text-xs text-[#8F8F8F] mt-0.5">點我看該叫什麼、叫多少</p>
+                </div>
+                <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F]" />
+              </Link>
             )}
 
             {/* KPI 摘要卡（M4：補本月毛利／淨利，關閉 M2 已知缺口，見 PRD §7.1） */}

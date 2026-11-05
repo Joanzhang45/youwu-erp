@@ -7,6 +7,7 @@
 //   /stock?stocktake=1          → CategorySelectionList（選一個分類開始盤點）
 //   /stock?stocktake=1&category=X → StocktakeFlow（逐項盤點）
 //   /stock?records=1            → StocktakeRecords（盤點紀錄回查）
+//   /stock?reorder=1            → ReorderList（補貨清單，migration 014 v_reorder_suggestions）
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -17,6 +18,7 @@ import { RequireAuth } from "@/components/app/RequireAuth";
 import { StockAdjustSheet } from "@/components/app/StockAdjustSheet";
 import { StocktakeFlow } from "@/components/app/StocktakeFlow";
 import { StocktakeRecords } from "@/components/app/StocktakeRecords";
+import { ReorderList } from "@/components/app/ReorderList";
 import { ChevronRightIcon } from "@/components/app/icons";
 
 type StockAction = { product: Product; type: "in" | "out" } | null;
@@ -40,8 +42,10 @@ function StockContent() {
   const stocktake = searchParams.get("stocktake");
   const category = searchParams.get("category");
   const records = searchParams.get("records");
+  const reorder = searchParams.get("reorder");
 
   if (records) return <StocktakeRecords />;
+  if (reorder) return <ReorderList />;
   if (stocktake && category) return <StocktakeFlow category={category} />;
   if (stocktake) return <CategorySelectionList />;
   return <StockHome />;
@@ -242,6 +246,12 @@ function StockHome() {
             className="flex-1 min-h-11 flex items-center justify-center gap-1.5 rounded-xl border border-[#EAEAEA] text-sm font-medium text-[#171717] hover:border-[#171717] transition-colors duration-150"
           >
             開始盤點
+          </Link>
+          <Link
+            href="/stock?reorder=1"
+            className="min-h-11 px-3 flex items-center justify-center rounded-xl text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150"
+          >
+            該補貨
           </Link>
           <Link
             href="/stock?records=1"
