@@ -36,6 +36,17 @@ export async function signIn(email: string, password: string) {
   return getSupabase().auth.signInWithPassword({ email, password })
 }
 
+// 信箱登入連結（2026-11-08 瓊安要求：不用記密碼）。shouldCreateUser:false＝只寄給已存在的帳號，
+// 陌生 email 不會因此被建立帳號。redirectTo 必須在 Supabase 後台 URL Configuration 的允許清單內，
+// 不在清單時 Supabase 會改導到 Site URL。implicit flow（supabase-js 預設）：連結在任何瀏覽器開都能登入，
+// 回到 /login 後 detectSessionInUrl 從網址 # 取出 session。
+export async function sendLoginLink(email: string, redirectTo: string) {
+  return getSupabase().auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: false, emailRedirectTo: redirectTo },
+  })
+}
+
 export async function signOutUser(scope: 'local' | 'global' = 'local') {
   return getSupabase().auth.signOut({ scope })
 }
