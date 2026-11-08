@@ -13,6 +13,7 @@ import type { AdCost, OperatingExpense } from "@/lib/database.types";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { ExpenseFormSheet, type ExpenseFormValue } from "@/components/app/ExpenseFormSheet";
 import { PlusIcon } from "@/components/app/icons";
+import { friendlyError } from "@/lib/friendlyError";
 
 type Tab = "ads" | "operating";
 const PAGE_SIZE = 20;
@@ -48,9 +49,10 @@ function parseAdsCSV(text: string): Partial<AdCost>[] {
 
     const getVal = (idx: number) => (idx >= 0 && idx < values.length ? values[idx] : "");
     const spend = Number(getVal(colSpend).replace(/[,$]/g, ""));
-    if (!spend) continue;
+    const date = getVal(colDate);
+    if (!spend || !date) continue; // 廣告費日期在資料庫是必填，沒日期的列存不進去
 
-    results.push({ ad_date: getVal(colDate) || null, amount: spend, description: getVal(colDesc) || null });
+    results.push({ ad_date: date, amount: spend, description: getVal(colDesc) || null });
   }
   return results;
 }
@@ -99,6 +101,7 @@ function SpendPageContent() {
           .from("ad_costs")
           .select("*", { count: "exact" })
           .order("ad_date", { ascending: false })
+          .order("id", { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
         if (error) throw error;
         const rows = data || [];
@@ -111,7 +114,7 @@ function SpendPageContent() {
           setAdsSum(all.reduce((s, a) => s + (Number(a.amount) || 0), 0));
         }
       } catch (e) {
-        toast(e instanceof Error ? e.message : "載入失敗", "error");
+        toast(friendlyError(e, "載入失敗"), "error");
       } finally {
         setAdsLoading(false);
         setAdsLoadingMore(false);
@@ -130,6 +133,7 @@ function SpendPageContent() {
           .from("operating_expenses")
           .select("*", { count: "exact" })
           .order("expense_date", { ascending: false })
+          .order("id", { ascending: false })
           .range(from, from + PAGE_SIZE - 1);
         if (error) throw error;
         const rows = data || [];
@@ -142,7 +146,7 @@ function SpendPageContent() {
           setExpSum(all.reduce((s, e) => s + (Number(e.amount) || 0), 0));
         }
       } catch (e) {
-        toast(e instanceof Error ? e.message : "載入失敗", "error");
+        toast(friendlyError(e, "載入失敗"), "error");
       } finally {
         setExpLoading(false);
         setExpLoadingMore(false);
@@ -218,7 +222,7 @@ function SpendPageContent() {
       );
       loadAds(true);
     } catch (e) {
-      toast(e instanceof Error ? e.message : "匯入失敗", "error");
+      toast(friendlyError(e, "匯入失敗"), "error");
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -230,7 +234,7 @@ function SpendPageContent() {
     if (!ok) return;
     const { error } = await getSupabase().from("ad_costs").delete().eq("id", id);
     if (error) {
-      toast(error.message, "error");
+      toast(friendlyError(error, "儲存失敗"), "error");
       return;
     }
     toast("已刪除");
@@ -242,7 +246,7 @@ function SpendPageContent() {
     if (!ok) return;
     const { error } = await getSupabase().from("operating_expenses").delete().eq("id", id);
     if (error) {
-      toast(error.message, "error");
+      toast(friendlyError(error, "儲存失敗"), "error");
       return;
     }
     toast("已刪除");
@@ -277,7 +281,7 @@ function SpendPageContent() {
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">費用</h1>
-        <p className="text-sm text-[#8F8F8F] mt-0.5">
+        <p className="text-sm text-[#6B6B6B] mt-0.5">
           廣告 ${money(adsSum)} · 營業 ${money(expSum)}
         </p>
       </header>
@@ -288,7 +292,7 @@ function SpendPageContent() {
             key={t}
             onClick={() => setTab(t)}
             className={`flex-1 min-h-10 rounded-lg text-sm font-medium transition-colors duration-150 ${
-              tab === t ? "bg-white text-[#171717] shadow-sm" : "text-[#8F8F8F]"
+              tab === t ? "bg-white text-[#171717] shadow-sm" : "text-[#6B6B6B]"
             }`}
           >
             {t === "ads" ? `廣告費用（${adsTotal}）` : `營業費用（${expTotal}）`}
@@ -305,9 +309,9 @@ function SpendPageContent() {
             </label>
 
             {adsLoading ? (
-              <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+              <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
             ) : ads.length === 0 ? (
-              <p className="text-center text-sm text-[#8F8F8F] py-12">尚無廣告數據</p>
+              <p className="text-center text-sm text-[#6B6B6B] py-12">尚無廣告數據</p>
             ) : (
               <>
                 <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden">
@@ -315,7 +319,7 @@ function SpendPageContent() {
                     <div key={a.id} className="px-4 py-3 flex items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-[#171717] truncate">{a.description || "廣告費"}</p>
-                        <p className="text-[11px] text-[#8F8F8F] mt-0.5">{a.ad_date}</p>
+                        <p className="text-[12px] text-[#6B6B6B] mt-0.5">{a.ad_date}</p>
                       </div>
                       <span className="text-sm font-semibold text-[#171717] tabular-nums flex-shrink-0">${money(a.amount)}</span>
                       <button onClick={() => deleteAd(a.id)} className="text-[#E00] text-xs flex-shrink-0 hover:underline">
@@ -350,9 +354,9 @@ function SpendPageContent() {
             </button>
 
             {expLoading ? (
-              <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+              <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
             ) : expenses.length === 0 ? (
-              <p className="text-center text-sm text-[#8F8F8F] py-12">尚無營業費用</p>
+              <p className="text-center text-sm text-[#6B6B6B] py-12">尚無營業費用</p>
             ) : (
               <>
                 <div className="space-y-2">
@@ -366,13 +370,13 @@ function SpendPageContent() {
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-[#171717] truncate">{e.item_name || e.description || "—"}</p>
                             <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                              <span className="text-[11px] text-[#8F8F8F]">{e.expense_date}</span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FAFAFA] border border-[#EAEAEA] text-[#666666]">
+                              <span className="text-[12px] text-[#6B6B6B]">{e.expense_date}</span>
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#FAFAFA] border border-[#EAEAEA] text-[#666666]">
                                 {e.category}
                               </span>
-                              {qty > 1 && <span className="text-[11px] text-[#8F8F8F] tabular-nums">{qty} 個 × ${unitPrice.toFixed(0)}</span>}
+                              {qty > 1 && <span className="text-[12px] text-[#6B6B6B] tabular-nums">{qty} 個 × ${unitPrice.toFixed(0)}</span>}
                             </div>
-                            {e.notes && <p className="text-[11px] text-[#8F8F8F] mt-0.5 truncate">{e.notes}</p>}
+                            {e.notes && <p className="text-[12px] text-[#6B6B6B] mt-0.5 truncate">{e.notes}</p>}
                           </div>
                           <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
                             <p className="text-sm font-semibold text-[#171717] tabular-nums">${money(amt)}</p>

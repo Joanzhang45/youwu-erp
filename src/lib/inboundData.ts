@@ -79,7 +79,7 @@ export async function fetchInboundChain(poNumbers: string[]): Promise<InboundCha
 
   const grouped = new Map<string, Map<number, ConsolidatedShipmentItem[]>>();
   for (const item of shipItems) {
-    if (!item.po_number) continue;
+    if (!item.po_number || item.shipment_id == null) continue;
     const byShipment = grouped.get(item.po_number) || new Map<number, ConsolidatedShipmentItem[]>();
     const list = byShipment.get(item.shipment_id) || [];
     list.push(item);

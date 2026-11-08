@@ -71,11 +71,11 @@ export function AppTabBar() {
                 className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 min-w-[56px] transition-colors duration-150"
               >
                 <tab.Icon
-                  className={active ? "text-[#171717]" : "text-[#8F8F8F]"}
+                  className={active ? "text-[#171717]" : "text-[#6B6B6B]"}
                 />
                 <span
-                  className={`text-[11px] ${
-                    active ? "text-[#171717] font-medium" : "text-[#8F8F8F]"
+                  className={`text-[12px] ${
+                    active ? "text-[#171717] font-medium" : "text-[#6B6B6B]"
                   }`}
                 >
                   {tab.label}
@@ -104,7 +104,7 @@ export function AppTabBar() {
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors duration-150 ${
                   active
                     ? "text-[#171717] font-medium bg-[#FAFAFA]"
-                    : "text-[#8F8F8F] hover:text-[#171717]"
+                    : "text-[#6B6B6B] hover:text-[#171717]"
                 }`}
               >
                 <node.Icon className="w-4 h-4" />

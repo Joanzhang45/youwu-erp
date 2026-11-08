@@ -1,8 +1,14 @@
-name: Deploy to GitHub Pages
+name: Check and deploy to GitHub Pages
+
+# 第二次健檢 #25：上線前一定先過檢查——任何一關沒過就不部署。
+#   check：程式規範（lint）、型別、單元測試
+#   db：在全新 Postgres 17 依 supabase/schema.sql 從零重建資料庫（#26），跑算錢與庫存測試，
+#       再把重建出來的結構匯出一次，跟 repo 裡的 schema.sql／database.generated.ts 比對，不一致就擋
+# 推到任何分支都會跑檢查；只有 master 會部署。
 
 on:
   push:
-    branches: [master]
+  pull_request:
 
 permissions:
   contents: read
@@ -10,17 +16,60 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: ${{ github.ref == 'refs/heads/master' && 'pages' || github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary==2.9.10
+      - name: 從零重建資料庫並跑算錢測試
+        run: python scripts/run_sql_tests.py --rebuild
+      - name: 重建結果要和 repo 裡的結構檔一致
+        run: |
+          mkdir -p /tmp/redump
+          python scripts/dump_schema.py --out-dir /tmp/redump
+          diff -u supabase/schema.sql /tmp/redump/schema.sql
+          diff -u src/lib/database.generated.ts /tmp/redump/database.generated.ts
+
+  build:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [check, db]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: GITHUB_PAGES=true npx next build
@@ -32,11 +81,11 @@ jobs:
           path: ./out
 
   deploy:
+    needs: build
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4

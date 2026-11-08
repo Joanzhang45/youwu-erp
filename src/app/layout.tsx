@@ -26,8 +26,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // 不鎖縮放：手機要能兩指放大看小字（第二次健檢 #21）
   themeColor: "#1e293b",
 };
 

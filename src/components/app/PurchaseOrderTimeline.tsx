@@ -25,6 +25,7 @@ import {
   type ShipmentGroup,
 } from "@/lib/inboundData";
 import { ChevronRightIcon, CheckIcon, ReceiveIcon } from "./icons";
+import { friendlyError } from "@/lib/friendlyError";
 
 const LOGISTICS_INDIVIDUAL_THRESHOLD = 4;
 
@@ -41,17 +42,17 @@ const SHIPMENT_NEXT: Record<string, { next: string; cta: string }> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  待寄出: "bg-[#FAFAFA] text-[#8F8F8F] border-[#EAEAEA]",
+  待寄出: "bg-[#FAFAFA] text-[#6B6B6B] border-[#EAEAEA]",
   已寄出: "bg-[#0070F3]/10 text-[#0070F3] border-[#0070F3]/30",
   運送中: "bg-[#F5A623]/10 text-[#F5A623] border-[#F5A623]/30",
   已到達: "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30",
   已出發: "bg-[#0070F3]/10 text-[#0070F3] border-[#0070F3]/30",
-  準備中: "bg-[#FAFAFA] text-[#8F8F8F] border-[#EAEAEA]",
+  準備中: "bg-[#FAFAFA] text-[#6B6B6B] border-[#EAEAEA]",
   已入倉: "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30",
   已入庫: "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30",
   已驗收: "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30",
   異常: "bg-[#E00]/10 text-[#E00] border-[#E00]/30",
-  取消: "bg-[#FAFAFA] text-[#8F8F8F] border-[#EAEAEA]",
+  取消: "bg-[#FAFAFA] text-[#6B6B6B] border-[#EAEAEA]",
 };
 
 function money(n: number | null | undefined): string {
@@ -130,7 +131,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
       toast("已標記已下單");
       fetchAll();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "更新失敗", "error");
+      toast(friendlyError(e, "更新失敗"), "error");
     } finally {
       setBusyKey(null);
     }
@@ -156,7 +157,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
       toast("已取消採購單");
       fetchAll();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "取消失敗", "error");
+      toast(friendlyError(e, "取消失敗"), "error");
     } finally {
       setBusyKey(null);
     }
@@ -205,7 +206,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
       toast("已結案");
       fetchAll();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "結案失敗", "error");
+      toast(friendlyError(e, "結案失敗"), "error");
     } finally {
       setBusyKey(null);
     }
@@ -225,7 +226,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
       toast(step.cta);
       fetchAll();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "更新失敗", "error");
+      toast(friendlyError(e, "更新失敗"), "error");
     } finally {
       setBusyKey(null);
     }
@@ -243,14 +244,14 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
       toast(step.cta);
       fetchAll();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "更新失敗", "error");
+      toast(friendlyError(e, "更新失敗"), "error");
     } finally {
       setBusyKey(null);
     }
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-[#6B6B6B] text-sm">載入中...</div>;
   }
 
   if (loadError) {
@@ -299,7 +300,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
           ← 進貨
         </Link>
         <h1 className="text-xl font-semibold text-[#171717] tracking-tight mt-1 font-mono">{po.po_number}</h1>
-        <p className="text-sm text-[#8F8F8F] mt-0.5">
+        <p className="text-sm text-[#6B6B6B] mt-0.5">
           {po.order_date || "未設定日期"} · {po.purchaser || "未指定採購人"}
         </p>
         {po.status_cancelled && (
@@ -348,7 +349,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-[#171717]">下單</p>
-                <p className="text-xs text-[#8F8F8F] mt-0.5">
+                <p className="text-xs text-[#6B6B6B] mt-0.5">
                   {/* 技術債修復 2026-09-04：原用 po.grand_total 配 NT$ 前綴——grand_total 存的是
                       CNY 原值（歷史單皆同），跟前面的 ¥ 小計其實是同一個數字，配 NT$ 只會誤導成
                       已換算金額。改讀 total_payment_ntd，讓「CNY 小計 → 換算 NTD」的箭頭真的成立。 */}
@@ -384,9 +385,9 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-[#171717] truncate">{item.product_name}</p>
-                          {item.variant_name && <p className="text-[11px] text-[#8F8F8F] truncate">{item.variant_name}</p>}
+                          {item.variant_name && <p className="text-[12px] text-[#6B6B6B] truncate">{item.variant_name}</p>}
                         </div>
-                        <p className="text-[11px] text-[#8F8F8F] flex-shrink-0 tabular-nums">
+                        <p className="text-[12px] text-[#6B6B6B] flex-shrink-0 tabular-nums">
                           x{item.qty} · ¥{Number(item.subtotal_cny || 0).toFixed(2)}
                         </p>
                       </div>
@@ -408,10 +409,10 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
               )}
             </div>
             {chain.logistics.length === 0 ? (
-              <p className="text-xs text-[#8F8F8F] mt-1">尚未建立物流紀錄</p>
+              <p className="text-xs text-[#6B6B6B] mt-1">尚未建立物流紀錄</p>
             ) : (
               <>
-                <p className="text-xs text-[#8F8F8F] mt-0.5">
+                <p className="text-xs text-[#6B6B6B] mt-0.5">
                   {chain.logistics.length} 個包裹 · {logisticsDoneCount} 個已抵達集運倉
                 </p>
                 {chain.logistics.length <= LOGISTICS_INDIVIDUAL_THRESHOLD ? (
@@ -429,8 +430,8 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
                       <div className="mt-2 rounded-xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden max-h-72 overflow-y-auto">
                         {chain.logistics.map((rec) => (
                           <div key={rec.id} className="px-3 py-2 flex items-center justify-between gap-2">
-                            <p className="text-[11px] font-mono text-[#171717] truncate">{rec.tracking_number || "無單號"}</p>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full border flex-shrink-0 ${STATUS_BADGE[rec.status || ""] || ""}`}>
+                            <p className="text-[12px] font-mono text-[#171717] truncate">{rec.tracking_number || "無單號"}</p>
+                            <span className={`text-[11px] px-1.5 py-0.5 rounded-full border flex-shrink-0 ${STATUS_BADGE[rec.status || ""] || ""}`}>
                               {rec.status || "-"}
                             </span>
                           </div>
@@ -454,7 +455,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
               )}
             </div>
             {chain.shipmentGroups.length === 0 ? (
-              <p className="text-xs text-[#8F8F8F] mt-1">尚未建立集運批次</p>
+              <p className="text-xs text-[#6B6B6B] mt-1">尚未建立集運批次</p>
             ) : (
               <div className="mt-2 space-y-2">
                 {chain.shipmentGroups.map((g) => (
@@ -474,9 +475,9 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
           <TimelineStep index={3} stageIndex={stageIndex} last={false}>
             <p className="text-sm font-semibold text-[#171717]">到貨</p>
             {chain.shipmentGroups.length === 0 ? (
-              <p className="text-xs text-[#8F8F8F] mt-1">尚無集運批次可等待到貨</p>
+              <p className="text-xs text-[#6B6B6B] mt-1">尚無集運批次可等待到貨</p>
             ) : arrivedGroups.length === 0 ? (
-              <p className="text-xs text-[#8F8F8F] mt-1">等待到貨中</p>
+              <p className="text-xs text-[#6B6B6B] mt-1">等待到貨中</p>
             ) : (
               <p className="text-xs text-[#0CCE6B] mt-1 font-medium">
                 {arrivedGroups.length}/{chain.shipmentGroups.length} 批已到貨{latestArrival ? `（最近 ${latestArrival}）` : ""}
@@ -491,7 +492,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
               po.status_received ? (
                 <p className="text-xs text-[#0CCE6B] mt-1 font-medium">已完成點收（歷史紀錄，落地成本已計入商品成本）</p>
               ) : (
-                <p className="text-xs text-[#8F8F8F] mt-1">還沒到貨，先不能點收</p>
+                <p className="text-xs text-[#6B6B6B] mt-1">還沒到貨，先不能點收</p>
               )
             ) : (
               <div className="mt-2 space-y-2">
@@ -507,7 +508,7 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
                           <p className="text-xs font-medium text-[#171717]">
                             {g.shipment.shipment_number} 已完成點收
                           </p>
-                          <p className="text-[11px] text-[#8F8F8F] mt-0.5">
+                          <p className="text-[12px] text-[#6B6B6B] mt-0.5">
                             {rv.receiver || "-"} · {rv.receiving_date || "-"}
                           </p>
                           <ReceivingPhotos receivingId={rv.id} />
@@ -526,9 +527,9 @@ export function PurchaseOrderTimeline({ poId }: { poId: number }) {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-[#171717]">前往點收（{g.shipment.shipment_number}）</p>
-                        <p className="text-[11px] text-[#8F8F8F] mt-0.5">{g.items.length} 個品項待點收</p>
+                        <p className="text-[12px] text-[#6B6B6B] mt-0.5">{g.items.length} 個品項待點收</p>
                       </div>
-                      <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F] flex-shrink-0" />
+                      <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B] flex-shrink-0" />
                     </Link>
                   );
                 })}
@@ -637,12 +638,12 @@ function LogisticsRow({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-mono text-[#171717] truncate">{record.tracking_number || "無單號"}</p>
-          <p className="text-[11px] text-[#8F8F8F] mt-0.5">
+          <p className="text-[12px] text-[#6B6B6B] mt-0.5">
             {record.logistics_company || "-"}
             {record.total_weight_kg != null ? ` · ${record.total_weight_kg}kg` : ""}
           </p>
         </div>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 font-medium ${STATUS_BADGE[record.status || ""] || ""}`}>
+        <span className={`text-[11px] px-2 py-0.5 rounded-full border flex-shrink-0 font-medium ${STATUS_BADGE[record.status || ""] || ""}`}>
           {record.status || "-"}
         </span>
       </div>
@@ -679,22 +680,22 @@ function ShipmentRow({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-mono text-[#171717] truncate">{s.shipment_number}</p>
-          <p className="text-[11px] text-[#8F8F8F] mt-0.5">
+          <p className="text-[12px] text-[#6B6B6B] mt-0.5">
             {s.forwarder || "-"} · {s.shipping_method || "-"} · {group.items.length} 個品項
           </p>
           {s.total_cost_ntd != null && Number(s.total_cost_ntd) > 0 && (
-            <p className="text-[11px] text-[#8F8F8F] mt-0.5">
+            <p className="text-[12px] text-[#6B6B6B] mt-0.5">
               運費成本 NT${money(s.total_cost_ntd)}
               {Number(s.total_weight_kg) > 0 ? ` · ${s.total_weight_kg}kg` : ""}
             </p>
           )}
           {!received && (
-            <button onClick={onEditCost} className={`text-[11px] mt-1 hover:underline ${missingCost ? "text-[#E00]" : "text-[#0070F3]"}`}>
+            <button onClick={onEditCost} className={`text-[12px] mt-1 hover:underline ${missingCost ? "text-[#E00]" : "text-[#0070F3]"}`}>
               {missingCost ? "還沒填總重或運費，點收前要補上" : "修改總重與運費"}
             </button>
           )}
         </div>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 font-medium ${STATUS_BADGE[s.status || ""] || ""}`}>
+        <span className={`text-[11px] px-2 py-0.5 rounded-full border flex-shrink-0 font-medium ${STATUS_BADGE[s.status || ""] || ""}`}>
           {s.status || "-"}
         </span>
       </div>

@@ -14,6 +14,8 @@ import type { SalesOrder, SalesOrderItem } from "@/lib/database.types";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { fetchAllRows, itemUnitCost } from "@/lib/fetchAll";
 import { SearchIcon } from "@/components/app/icons";
+import { friendlyError } from "@/lib/friendlyError";
+import { ilikeAny } from "@/lib/postgrestFilter";
 
 const PAGE_SIZE = 20;
 
@@ -29,7 +31,7 @@ type SummaryStats = { totalRevenue: number; totalNet: number; totalFees: number;
 function withOrderFilters<T>(query: T, search: string, status: string): T {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q: any = query;
-  if (search) q = q.or(`order_number.ilike.%${search}%,buyer_name.ilike.%${search}%`);
+  if (search) q = q.or(ilikeAny(["order_number", "buyer_name"], search));
   if (status !== "全部") q = q.eq("status", status);
   return q as T;
 }
@@ -88,7 +90,7 @@ function SalesPageContent() {
         const supabase = getSupabase();
         const from = reset ? 0 : offset;
         const query = withOrderFilters(
-          supabase.from("sales_orders").select("*", { count: "exact" }).order("order_date", { ascending: false }),
+          supabase.from("sales_orders").select("*", { count: "exact" }).order("order_date", { ascending: false }).order("id", { ascending: false }),
           search,
           status
         ).range(from, from + PAGE_SIZE - 1);
@@ -134,7 +136,7 @@ function SalesPageContent() {
           setCostByOrder({});
         }
       } catch (e) {
-        toast(e instanceof Error ? e.message : "載入失敗", "error");
+        toast(friendlyError(e, "載入失敗"), "error");
       } finally {
         setLoading(false);
         setLoadingMore(false);
@@ -181,7 +183,7 @@ function SalesPageContent() {
 
       setSummary({ totalRevenue, totalNet, totalFees: totalRevenue - totalNet, totalCOGS, totalProfit: totalNet - totalCOGS, count: rows.length });
     } catch (e) {
-      toast(e instanceof Error ? e.message : "統計載入失敗", "error");
+      toast(friendlyError(e, "統計載入失敗"), "error");
     } finally {
       setSummaryLoading(false);
     }
@@ -195,12 +197,12 @@ function SalesPageContent() {
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-3 max-w-3xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">訂單</h1>
-        <p className="text-sm text-[#8F8F8F] mt-0.5">共 {total.toLocaleString()} 筆訂單</p>
+        <p className="text-sm text-[#6B6B6B] mt-0.5">共 {total.toLocaleString()} 筆訂單</p>
       </header>
 
       <main className="px-5 max-w-3xl mx-auto pb-10 space-y-4">
         <div className="relative">
-          <SearchIcon className="w-4 h-4 text-[#8F8F8F] absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <SearchIcon className="w-4 h-4 text-[#6B6B6B] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchInput}
@@ -229,29 +231,29 @@ function SalesPageContent() {
         {/* 統計卡 */}
         <section className="rounded-2xl border border-[#EAEAEA] p-5">
           {summaryLoading || !summary ? (
-            <div className="text-center py-4 text-[#8F8F8F] text-sm">統計計算中...</div>
+            <div className="text-center py-4 text-[#6B6B6B] text-sm">統計計算中...</div>
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <p className="text-xl sm:text-2xl font-semibold text-[#171717] tabular-nums">${money(summary.totalRevenue)}</p>
-                  <p className="text-[11px] text-[#8F8F8F] mt-0.5">總營收</p>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5">總營收</p>
                 </div>
                 <div>
                   <p className="text-xl sm:text-2xl font-semibold text-[#E00] tabular-nums">-${money(Math.abs(summary.totalFees))}</p>
-                  <p className="text-[11px] text-[#8F8F8F] mt-0.5">平台費用</p>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5">平台費用</p>
                 </div>
                 <div>
                   <p className="text-xl sm:text-2xl font-semibold text-[#0070F3] tabular-nums">${money(summary.totalNet)}</p>
-                  <p className="text-[11px] text-[#8F8F8F] mt-0.5">淨營收</p>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5">淨營收</p>
                 </div>
                 <div>
                   <p className="text-xl sm:text-2xl font-semibold text-[#F5A623] tabular-nums">-${money(summary.totalCOGS)}</p>
-                  <p className="text-[11px] text-[#8F8F8F] mt-0.5">商品成本</p>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5">商品成本</p>
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-[#EAEAEA] flex items-center justify-between">
-                <p className="text-xs text-[#8F8F8F]">淨利潤（{summary.count.toLocaleString()} 筆）</p>
+                <p className="text-xs text-[#6B6B6B]">淨利潤（{summary.count.toLocaleString()} 筆）</p>
                 <p className={`text-lg font-semibold tabular-nums ${summary.totalProfit >= 0 ? "text-[#0CCE6B]" : "text-[#E00]"}`}>
                   ${money(summary.totalProfit)}
                 </p>
@@ -262,9 +264,9 @@ function SalesPageContent() {
 
         {/* 列表 */}
         {loading ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : orders.length === 0 ? (
-          <p className="text-center text-sm text-[#8F8F8F] py-12">沒有符合條件的訂單</p>
+          <p className="text-center text-sm text-[#6B6B6B] py-12">沒有符合條件的訂單</p>
         ) : (
           <div className="space-y-2 app-fade-up-enter">
             {orders.map((o) => (
@@ -289,7 +291,7 @@ function SalesPageContent() {
           </div>
         )}
 
-        <p className="pt-6 text-xs text-[#8F8F8F] text-center">蝦皮訂單每月由系統自動匯入，不需要在這裡手動匯入。</p>
+        <p className="pt-6 text-xs text-[#6B6B6B] text-center">蝦皮訂單每月由系統自動匯入，不需要在這裡手動匯入。</p>
       </main>
     </div>
   );
@@ -322,23 +324,23 @@ function OrderCard({
         <div className="min-w-0">
           <p className="text-sm font-medium text-[#171717] truncate">
             {headline}
-            {extraCount > 0 && <span className="text-[#8F8F8F] font-normal"> 等 {extraCount + 1} 項</span>}
+            {extraCount > 0 && <span className="text-[#6B6B6B] font-normal"> 等 {extraCount + 1} 項</span>}
           </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <span className="text-[11px] text-[#8F8F8F]">{o.order_date || "-"}</span>
-            {o.buyer_name && <span className="text-[11px] text-[#8F8F8F]">{o.buyer_name}</span>}
-            <span className="text-[10px] text-[#8F8F8F] font-mono">{o.order_number}</span>
+            <span className="text-[12px] text-[#6B6B6B]">{o.order_date || "-"}</span>
+            {o.buyer_name && <span className="text-[12px] text-[#6B6B6B]">{o.buyer_name}</span>}
+            <span className="text-[11px] text-[#6B6B6B] font-mono">{o.order_number}</span>
           </div>
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-sm font-semibold text-[#171717] tabular-nums">${money(orderAmount)}</p>
-          <p className={`text-[11px] tabular-nums ${profit >= 0 ? "text-[#0CCE6B]" : "text-[#E00]"}`}>利潤 ${money(profit)}</p>
+          <p className={`text-[12px] tabular-nums ${profit >= 0 ? "text-[#0CCE6B]" : "text-[#E00]"}`}>利潤 ${money(profit)}</p>
         </div>
       </div>
 
       {o.status && (
         <span
-          className={`inline-block mt-2 text-[10px] px-2 py-0.5 rounded-full border ${
+          className={`inline-block mt-2 text-[11px] px-2 py-0.5 rounded-full border ${
             o.is_cancelled
               ? "bg-[#E00]/10 text-[#E00] border-[#E00]/30"
               : o.status.includes("完成")
@@ -358,9 +360,9 @@ function OrderCard({
                 <div key={it.id} className="flex items-center justify-between bg-[#FAFAFA] rounded-lg px-2.5 py-1.5">
                   <div className="min-w-0 flex-1">
                     <p className="text-[#171717] truncate">{it.product_name || "未知商品"}</p>
-                    {it.variant_name && <p className="text-[#8F8F8F] text-[11px] truncate">{it.variant_name}</p>}
+                    {it.variant_name && <p className="text-[#6B6B6B] text-[12px] truncate">{it.variant_name}</p>}
                   </div>
-                  <div className="text-[#8F8F8F] flex-shrink-0 ml-2">
+                  <div className="text-[#6B6B6B] flex-shrink-0 ml-2">
                     x{it.qty || 1}
                     {it.unit_price != null && ` · $${money(it.unit_price)}`}
                   </div>

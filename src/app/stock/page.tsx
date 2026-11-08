@@ -21,6 +21,7 @@ import { StocktakeFlow } from "@/components/app/StocktakeFlow";
 import { StocktakeRecords } from "@/components/app/StocktakeRecords";
 import { ReorderList } from "@/components/app/ReorderList";
 import { ChevronRightIcon } from "@/components/app/icons";
+import { friendlyError } from "@/lib/friendlyError";
 
 type StockAction = { product: Product; type: "in" | "out" } | null;
 
@@ -31,7 +32,7 @@ function isNotDiscontinued(p: Product): boolean {
 export default function StockPage() {
   return (
     <RequireAuth>
-      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#6B6B6B] text-sm">載入中...</div>}>
         <StockContent />
       </Suspense>
     </RequireAuth>
@@ -101,11 +102,11 @@ function CategorySelectionList() {
   return (
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
-        <Link href="/stock" className="inline-flex items-center gap-1 text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150 mb-2">
+        <Link href="/stock" className="inline-flex items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#171717] transition-colors duration-150 mb-2">
           ‹ 返回庫存
         </Link>
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">開始盤點</h1>
-        <p className="text-sm text-[#8F8F8F] mt-0.5">選一個分類，逐項核對帳上數量</p>
+        <p className="text-sm text-[#6B6B6B] mt-0.5">選一個分類，逐項核對帳上數量</p>
       </header>
 
       <main className="px-5 max-w-2xl mx-auto pb-10">
@@ -115,14 +116,14 @@ function CategorySelectionList() {
             className="block rounded-2xl border border-[#F5A623]/40 bg-[#F5A623]/5 p-4 mb-4 hover:border-[#F5A623] transition-colors duration-150"
           >
             <p className="text-sm font-medium text-[#171717]">有進行中的盤點：{resumeCategory}</p>
-            <p className="text-xs text-[#8F8F8F] mt-0.5">點此繼續上次的盤點進度</p>
+            <p className="text-xs text-[#6B6B6B] mt-0.5">點此繼續上次的盤點進度</p>
           </Link>
         )}
 
         {loadError && !loading ? (
           <LoadError message={loadError} onRetry={() => setReloadKey((k) => k + 1)} />
         ) : loading ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : (
           <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden app-fade-up-enter">
             {categories.map((c) => (
@@ -133,8 +134,8 @@ function CategorySelectionList() {
               >
                 <p className="text-sm font-medium text-[#171717]">{c.category}</p>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs text-[#8F8F8F] tabular-nums">{c.count} 項</span>
-                  <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F]" />
+                  <span className="text-xs text-[#6B6B6B] tabular-nums">{c.count} 項</span>
+                  <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B]" />
                 </div>
               </Link>
             ))}
@@ -180,7 +181,7 @@ function StockHome() {
       }
       setRecentIds(recent);
     } catch (e) {
-      toast(e instanceof Error ? e.message : "載入失敗", "error");
+      toast(friendlyError(e, "載入失敗"), "error");
     } finally {
       setLoading(false);
     }
@@ -257,24 +258,24 @@ function StockHome() {
           </Link>
           <Link
             href="/stock?reorder=1"
-            className="min-h-11 px-3 flex items-center justify-center rounded-xl text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150"
+            className="min-h-11 px-3 flex items-center justify-center rounded-xl text-sm text-[#6B6B6B] hover:text-[#171717] transition-colors duration-150"
           >
             該補貨
           </Link>
           <Link
             href="/stock?records=1"
-            className="min-h-11 px-3 flex items-center justify-center rounded-xl text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150"
+            className="min-h-11 px-3 flex items-center justify-center rounded-xl text-sm text-[#6B6B6B] hover:text-[#171717] transition-colors duration-150"
           >
             盤點紀錄
           </Link>
         </div>
 
         {loading ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : search.trim() ? (
           <div className="space-y-2 app-fade-up-enter">
             {searchResults.length === 0 ? (
-              <p className="text-center text-sm text-[#8F8F8F] py-8">沒有符合「{search}」的商品</p>
+              <p className="text-center text-sm text-[#6B6B6B] py-8">沒有符合「{search}」的商品</p>
             ) : (
               searchResults.map((p) => (
                 <StockRow
@@ -290,7 +291,7 @@ function StockHome() {
           <div className="app-fade-up-enter">
             {recentProducts.length > 0 && (
               <>
-                <p className="text-xs font-medium text-[#8F8F8F] mb-2">最近操作過</p>
+                <p className="text-xs font-medium text-[#6B6B6B] mb-2">最近操作過</p>
                 <div className="flex flex-wrap gap-2 mb-6">
                   {recentProducts.map((p) => (
                     <button
@@ -299,13 +300,13 @@ function StockHome() {
                       className="px-3 py-2 rounded-xl border border-[#EAEAEA] text-sm text-[#171717] hover:border-[#171717] transition-colors duration-150 flex items-center gap-2"
                     >
                       <span className="truncate max-w-[140px]">{p.product_name}</span>
-                      <span className="text-[#8F8F8F] tabular-nums">{p.stock_qty}</span>
+                      <span className="text-[#6B6B6B] tabular-nums">{p.stock_qty}</span>
                     </button>
                   ))}
                 </div>
               </>
             )}
-            <p className="text-center text-sm text-[#8F8F8F] py-8">
+            <p className="text-center text-sm text-[#6B6B6B] py-8">
               輸入商品名稱、SKU 開始調整庫存
             </p>
           </div>
@@ -338,7 +339,7 @@ function StockRow({ product: p, onIn, onOut }: { product: Product; onIn: () => v
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-[#171717] truncate">{p.product_name}</p>
         <div className="flex items-center gap-2">
-          {p.variant_name && <p className="text-xs text-[#8F8F8F] truncate">{p.variant_name}</p>}
+          {p.variant_name && <p className="text-xs text-[#6B6B6B] truncate">{p.variant_name}</p>}
           <span
             className={`text-xs font-semibold tabular-nums flex-shrink-0 ${
               isOut ? "text-[#E00]" : isLow ? "text-[#F5A623]" : "text-[#171717]"

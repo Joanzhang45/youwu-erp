@@ -8,7 +8,8 @@ import { createClient, SupabaseClient, Session } from '@supabase/supabase-js'
 // session 存 localStorage（storage key 維持預設，既有登入態沿用）、token 到期前背景自動續期，
 // 登一次長期有效。detectSessionInUrl 保持預設 true。
 //
-// signOutUser 目前站內無按鈕呼叫，保留供除錯／日後加登出入口。
+// signOutUser：「更多」頁的登出按鈕（第二次健檢 #22）。scope 'local' 只登出這台，
+// 'global' 讓這個帳號所有裝置的登入一起失效（手機掉了時用）。
 
 let _client: SupabaseClient | null = null
 
@@ -35,8 +36,8 @@ export async function signIn(email: string, password: string) {
   return getSupabase().auth.signInWithPassword({ email, password })
 }
 
-export async function signOutUser() {
-  return getSupabase().auth.signOut()
+export async function signOutUser(scope: 'local' | 'global' = 'local') {
+  return getSupabase().auth.signOut({ scope })
 }
 
 export async function getInitialSession(): Promise<Session | null> {

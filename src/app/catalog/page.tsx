@@ -15,13 +15,15 @@ import { RequireAuth } from "@/components/app/RequireAuth";
 import { ProductDetail } from "@/components/app/ProductDetail";
 import { ProductFormSheet } from "@/components/app/ProductFormSheet";
 import { ChevronRightIcon, PlusIcon, SearchIcon, LinkIcon } from "@/components/app/icons";
+import { friendlyError } from "@/lib/friendlyError";
+import { ilikeAny } from "@/lib/postgrestFilter";
 
 const PAGE_SIZE = 20;
 
 export default function CatalogPage() {
   return (
     <RequireAuth>
-      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#6B6B6B] text-sm">載入中...</div>}>
         <CatalogContent />
       </Suspense>
     </RequireAuth>
@@ -73,9 +75,9 @@ function CatalogHome() {
       try {
         const supabase = getSupabase();
         const from = reset ? 0 : offset;
-        let query = supabase.from("v_products_with_stock").select("*", { count: "exact" }).order("product_name");
+        let query = supabase.from("v_products_with_stock").select("*", { count: "exact" }).order("product_name").order("id");
         if (search) {
-          query = query.or(`product_name.ilike.%${search}%,sku.ilike.%${search}%,variant_name.ilike.%${search}%`);
+          query = query.or(ilikeAny(["product_name", "sku", "variant_name"], search));
         }
         query = query.range(from, from + PAGE_SIZE - 1);
         const { data, error, count } = await query;
@@ -86,7 +88,7 @@ function CatalogHome() {
         setTotal(count ?? 0);
         setHasMore(rows.length === PAGE_SIZE);
       } catch (e) {
-        toast(e instanceof Error ? e.message : "載入失敗", "error");
+        toast(friendlyError(e, "載入失敗"), "error");
       } finally {
         setLoading(false);
         setLoadingMore(false);
@@ -129,7 +131,7 @@ function CatalogHome() {
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">商品</h1>
-          <p className="text-sm text-[#8F8F8F] mt-0.5">共 {total.toLocaleString()} 項商品</p>
+          <p className="text-sm text-[#6B6B6B] mt-0.5">共 {total.toLocaleString()} 項商品</p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
@@ -142,7 +144,7 @@ function CatalogHome() {
 
       <main className="px-5 max-w-2xl mx-auto pb-10">
         <div className="relative mb-4">
-          <SearchIcon className="w-4 h-4 text-[#8F8F8F] absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <SearchIcon className="w-4 h-4 text-[#6B6B6B] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchInput}
@@ -153,9 +155,9 @@ function CatalogHome() {
         </div>
 
         {loading ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : items.length === 0 ? (
-          <p className="text-center text-sm text-[#8F8F8F] py-12">
+          <p className="text-center text-sm text-[#6B6B6B] py-12">
             {search ? `沒有符合「${search}」的商品` : "尚無商品資料"}
           </p>
         ) : (
@@ -179,7 +181,7 @@ function CatalogHome() {
         <div id="mapping-tool" className="mt-8">
           <button
             onClick={() => setToolsOpen((v) => !v)}
-            className="w-full flex items-center justify-between py-2.5 text-sm text-[#8F8F8F]"
+            className="w-full flex items-center justify-between py-2.5 text-sm text-[#6B6B6B]"
           >
             <span className="flex items-center gap-1.5">
               <LinkIcon className="w-4 h-4" />
@@ -215,22 +217,22 @@ function ProductRow({ product: p }: { product: Product }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-[#171717] truncate">{p.product_name}</p>
           <div className="flex items-center gap-2 flex-wrap mt-0.5">
-            {p.variant_name && <p className="text-xs text-[#8F8F8F] truncate">{p.variant_name}</p>}
+            {p.variant_name && <p className="text-xs text-[#6B6B6B] truncate">{p.variant_name}</p>}
             {p.product_status === "停售" && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FAFAFA] text-[#8F8F8F] border border-[#EAEAEA] flex-shrink-0">停售</span>
+              <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#FAFAFA] text-[#6B6B6B] border border-[#EAEAEA] flex-shrink-0">停售</span>
             )}
           </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {p.selling_price != null && <span className="text-xs text-[#171717] font-medium tabular-nums">${p.selling_price.toLocaleString()}</span>}
-            {p.unit_cost_ntd != null && <span className="text-[11px] text-[#8F8F8F] tabular-nums">成本 ${p.unit_cost_ntd.toFixed(0)}</span>}
-            {margin != null && <span className="text-[11px] text-[#8F8F8F] tabular-nums">毛利 {margin}%</span>}
+            {p.unit_cost_ntd != null && <span className="text-[12px] text-[#6B6B6B] tabular-nums">成本 ${p.unit_cost_ntd.toFixed(0)}</span>}
+            {margin != null && <span className="text-[12px] text-[#6B6B6B] tabular-nums">毛利 {margin}%</span>}
           </div>
         </div>
         <div className="text-right flex-shrink-0">
           <p className={`text-sm font-semibold tabular-nums ${isOut ? "text-[#E00]" : isLow ? "text-[#F5A623]" : "text-[#171717]"}`}>
             {p.stock_qty.toLocaleString()}
           </p>
-          <p className="text-[10px] text-[#8F8F8F]">庫存</p>
+          <p className="text-[11px] text-[#6B6B6B]">庫存</p>
         </div>
       </div>
     </Link>
@@ -270,7 +272,7 @@ function MappingTool() {
       setMappedCount(mappedCountRes.count ?? 0);
       setProducts(prodRes.data || []);
     } catch (e) {
-      toast(e instanceof Error ? e.message : "載入失敗", "error");
+      toast(friendlyError(e, "載入失敗"), "error");
     } finally {
       setLoading(false);
     }
@@ -308,14 +310,14 @@ function MappingTool() {
       setExpandedKey(null);
       fetchTool();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "對應失敗", "error");
+      toast(friendlyError(e, "對應失敗"), "error");
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <div className="text-center py-6 text-[#8F8F8F] text-sm">載入中...</div>;
+    return <div className="text-center py-6 text-[#6B6B6B] text-sm">載入中...</div>;
   }
 
   return (
@@ -324,19 +326,19 @@ function MappingTool() {
         <div className="grid grid-cols-2 gap-3 text-center">
           <div>
             <p className="text-lg font-semibold text-[#0CCE6B] tabular-nums">{mappedCount.toLocaleString()}</p>
-            <p className="text-[11px] text-[#8F8F8F] mt-0.5">已對應品項筆數</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-0.5">已對應品項筆數</p>
           </div>
           <div>
             <p className={`text-lg font-semibold tabular-nums ${unmapped.length > 0 ? "text-[#F5A623]" : "text-[#171717]"}`}>
               {unmapped.reduce((s, c) => s + c.count, 0).toLocaleString()}
             </p>
-            <p className="text-[11px] text-[#8F8F8F] mt-0.5">未對應品項筆數</p>
+            <p className="text-[12px] text-[#6B6B6B] mt-0.5">未對應品項筆數</p>
           </div>
         </div>
       </div>
 
       {unmapped.length === 0 ? (
-        <p className="text-center text-sm text-[#8F8F8F] py-6">所有蝦皮品項組合都已對應</p>
+        <p className="text-center text-sm text-[#6B6B6B] py-6">所有蝦皮品項組合都已對應</p>
       ) : (
         <div className="space-y-2">
           {unmapped.map((combo) => {
@@ -353,9 +355,9 @@ function MappingTool() {
                 >
                   <div className="min-w-0">
                     <p className="text-xs font-medium text-[#171717] truncate">{combo.product_name}</p>
-                    {combo.variant_name && <p className="text-[11px] text-[#8F8F8F] truncate">{combo.variant_name}</p>}
+                    {combo.variant_name && <p className="text-[12px] text-[#6B6B6B] truncate">{combo.variant_name}</p>}
                   </div>
-                  <span className="text-[11px] text-[#8F8F8F] flex-shrink-0 bg-white px-1.5 py-0.5 rounded border border-[#EAEAEA]">
+                  <span className="text-[12px] text-[#6B6B6B] flex-shrink-0 bg-white px-1.5 py-0.5 rounded border border-[#EAEAEA]">
                     {combo.count}x
                   </span>
                 </button>
@@ -378,7 +380,7 @@ function MappingTool() {
                           className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-[#FAFAFA] transition-colors duration-150 disabled:opacity-50"
                         >
                           <span className="font-medium text-[#171717]">{p.product_name}</span>
-                          {p.variant_name && <span className="text-[#8F8F8F] ml-1">| {p.variant_name}</span>}
+                          {p.variant_name && <span className="text-[#6B6B6B] ml-1">| {p.variant_name}</span>}
                         </button>
                       ))}
                     </div>

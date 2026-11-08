@@ -7,11 +7,39 @@ import { getSupabase } from "@/lib/supabase";
 
 export const PHOTO_BUCKET = "receiving-photos";
 
+// 手機原圖常 3～8MB，上傳前縮到長邊 1600px、JPEG 品質 0.8（約 200～500KB），省流量也省儲存空間
+// （第二次健檢 #27）。瀏覽器解不開（例如部分裝置的 HEIC）或本來就小就傳原檔。
+const MAX_SIDE = 1600;
+const SKIP_BELOW_BYTES = 400 * 1024;
+
+async function compressImage(file: File): Promise<Blob> {
+  if (file.size < SKIP_BELOW_BYTES || typeof createImageBitmap !== "function") return file;
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    bmp.close();
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.8));
+    return blob && blob.size < file.size ? blob : file;
+  } catch {
+    return file;
+  }
+}
+
 export async function uploadReceivingPhoto(shipmentId: number, itemId: number, file: File): Promise<string> {
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const body = await compressImage(file);
+  const compressed = body !== file;
+  const ext = compressed
+    ? "jpg"
+    : (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
   const path = `shipment-${shipmentId}/item-${itemId}-${Date.now()}.${ext}`;
-  const { error } = await getSupabase().storage.from(PHOTO_BUCKET).upload(path, file, {
-    contentType: file.type || "image/jpeg",
+  const { error } = await getSupabase().storage.from(PHOTO_BUCKET).upload(path, body, {
+    contentType: compressed ? "image/jpeg" : file.type || "image/jpeg",
     upsert: false,
   });
   if (error) throw error;

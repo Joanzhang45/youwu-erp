@@ -6,6 +6,8 @@
 import { useState } from "react";
 import type { OperatingExpense } from "@/lib/database.types";
 import { CheckIcon } from "./icons";
+import { friendlyError } from "@/lib/friendlyError";
+import { Sheet } from "./Sheet";
 
 const CATEGORIES = ["包材", "倉儲", "人事", "物流", "軟體", "設備", "其他"];
 
@@ -83,24 +85,13 @@ export function ExpenseFormSheet({
     try {
       await onSave(form);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "儲存失敗");
+      setError(friendlyError(e, "儲存失敗"));
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center">
-      <div className="bg-white w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-[#EAEAEA] p-5 app-sheet-enter">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-[#171717]">{editing ? "編輯營業費用" : "新增營業費用"}</h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-[#FAFAFA] text-[#666666] hover:bg-[#EAEAEA] transition-colors duration-150"
-            aria-label="關閉"
-          >
-            &times;
-          </button>
-        </div>
+    <Sheet title={editing ? "編輯營業費用" : "新增營業費用"} onClose={onClose}>
 
         <div className="space-y-3">
           <div>
@@ -116,7 +107,7 @@ export function ExpenseFormSheet({
                 <button
                   key={qd.label}
                   onClick={() => setForm({ ...form, expense_date: qd.getValue() })}
-                  className={`text-[11px] px-2 py-2 rounded-lg border flex-shrink-0 transition-colors duration-150 ${
+                  className={`text-[12px] px-2 py-2 rounded-lg border flex-shrink-0 transition-colors duration-150 ${
                     form.expense_date === qd.getValue() ? "bg-[#171717] text-white border-[#171717]" : "bg-white text-[#666666] border-[#EAEAEA]"
                   }`}
                 >
@@ -175,7 +166,7 @@ export function ExpenseFormSheet({
           <div className="flex items-center gap-2 text-xs text-[#666666] bg-[#FAFAFA] rounded-lg px-3 py-2 border border-[#EAEAEA]">
             <span>單價</span>
             <span className="font-semibold text-[#171717] tabular-nums">${unitPrice}</span>
-            <span className="text-[11px] text-[#8F8F8F]">= 總價 ÷ 數量（自動計算）</span>
+            <span className="text-[12px] text-[#6B6B6B]">= 總價 ÷ 數量（自動計算）</span>
           </div>
 
           <div>
@@ -206,7 +197,6 @@ export function ExpenseFormSheet({
             </>
           )}
         </button>
-      </div>
-    </div>
+    </Sheet>
   );
 }

@@ -22,7 +22,7 @@ const HISTORY_PAGE_SIZE = 20;
 export default function InboundPage() {
   return (
     <RequireAuth>
-      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#6B6B6B] text-sm">載入中...</div>}>
         <InboundContent />
       </Suspense>
     </RequireAuth>
@@ -73,7 +73,7 @@ function InboundHome() {
         .eq("status_received", false)
         .eq("status_cancelled", false)
         .order("order_date", { ascending: true })
-        .limit(50);
+        .order("id", { ascending: true });
       if (error) throw error;
       const list = data || [];
       setActive(list);
@@ -101,6 +101,7 @@ function InboundHome() {
           .select("*", { count: "exact" })
           .or("status_received.eq.true,status_cancelled.eq.true")
           .order("order_date", { ascending: false })
+          .order("id", { ascending: false })
           .range(offset, offset + HISTORY_PAGE_SIZE - 1);
         if (error) throw error;
         const rows = data || [];
@@ -128,7 +129,7 @@ function InboundHome() {
       <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">進貨</h1>
-          <p className="text-sm text-[#8F8F8F] mt-0.5">選品 → 採購 → 集運 → 到貨 → 點收，一條鏈看完</p>
+          <p className="text-sm text-[#6B6B6B] mt-0.5">選品 → 採購 → 集運 → 到貨 → 點收，一條鏈看完</p>
         </div>
         <button
           onClick={() => setShowAddPo(true)}
@@ -144,12 +145,12 @@ function InboundHome() {
           在捲到底時也有足夠的觸控淨空，不被導覽列遮蔽。 */}
       <main className="px-5 max-w-2xl mx-auto pb-24">
         {loading ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : loadError ? (
           <LoadError message={loadError} onRetry={fetchActive} />
         ) : active.length === 0 ? (
           <div className="rounded-2xl border border-[#EAEAEA] p-6 text-center">
-            <p className="text-sm text-[#8F8F8F]">目前沒有進行中的採購單</p>
+            <p className="text-sm text-[#6B6B6B]">目前沒有進行中的採購單</p>
           </div>
         ) : (
           <div className="space-y-3 app-fade-up-enter">
@@ -163,7 +164,7 @@ function InboundHome() {
         <div className="mt-6">
           <button
             onClick={toggleHistory}
-            className="w-full flex items-center justify-between py-2.5 text-sm text-[#8F8F8F]"
+            className="w-full flex items-center justify-between py-2.5 text-sm text-[#6B6B6B]"
           >
             <span>{historyOpen ? "收合歷史採購單" : `顯示歷史採購單${historyTotal != null ? `（共 ${historyTotal} 筆）` : ""}`}</span>
             <ChevronRightIcon className={`w-4 h-4 transition-transform duration-150 ${historyOpen ? "rotate-90" : ""}`} />
@@ -171,9 +172,9 @@ function InboundHome() {
           {historyOpen && (
             <div className="mt-2 app-fade-up-enter">
               {historyLoading && history.length === 0 ? (
-                <div className="text-center py-8 text-[#8F8F8F] text-sm">載入中...</div>
+                <div className="text-center py-8 text-[#6B6B6B] text-sm">載入中...</div>
               ) : history.length === 0 ? (
-                <p className="text-center text-sm text-[#8F8F8F] py-6">尚無歷史採購單</p>
+                <p className="text-center text-sm text-[#6B6B6B] py-6">尚無歷史採購單</p>
               ) : (
                 <>
                   <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden">
@@ -225,7 +226,7 @@ function InboundOrderCard({ po, chain }: { po: PurchaseOrder; chain: InboundChai
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[#171717] font-mono truncate">{po.po_number}</p>
-          <p className="text-xs text-[#8F8F8F] mt-0.5">
+          <p className="text-xs text-[#6B6B6B] mt-0.5">
             {po.order_date || "-"} · {po.purchaser || "未指定"}
           </p>
         </div>
@@ -236,7 +237,7 @@ function InboundOrderCard({ po, chain }: { po: PurchaseOrder; chain: InboundChai
               已用 Supabase REST 唯讀抽樣核對）。 */}
           <p className="text-sm font-semibold text-[#171717] tabular-nums">NT${money(po.total_payment_ntd)}</p>
           {po.status_abnormal != null && po.status_abnormal > 0 && (
-            <p className="text-[11px] text-[#E00] mt-0.5">{po.status_abnormal} 項異常</p>
+            <p className="text-[12px] text-[#E00] mt-0.5">{po.status_abnormal} 項異常</p>
           )}
         </div>
       </div>
@@ -244,7 +245,7 @@ function InboundOrderCard({ po, chain }: { po: PurchaseOrder; chain: InboundChai
         {STAGE_LABELS.map((label, idx) => (
           <div key={label} className="flex-1 flex flex-col items-center gap-1">
             <div className={`h-1.5 w-full rounded-full ${idx <= stageIndex ? "bg-[#171717]" : "bg-[#EAEAEA]"}`} />
-            <span className={`text-[9px] ${idx <= stageIndex ? "text-[#171717]" : "text-[#8F8F8F]"}`}>{label}</span>
+            <span className={`text-[10px] ${idx <= stageIndex ? "text-[#171717]" : "text-[#6B6B6B]"}`}>{label}</span>
           </div>
         ))}
       </div>
@@ -261,21 +262,21 @@ function HistoryRow({ po }: { po: PurchaseOrder }) {
     >
       <div className="min-w-0">
         <p className="text-sm font-medium text-[#171717] font-mono truncate">{po.po_number}</p>
-        <p className="text-xs text-[#8F8F8F] mt-0.5">
+        <p className="text-xs text-[#6B6B6B] mt-0.5">
           {po.order_date || "-"} · {po.purchaser || "未指定"}
         </p>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         <span
-          className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${
+          className={`text-[12px] px-2 py-0.5 rounded-full border font-medium ${
             po.status_cancelled
-              ? "bg-[#FAFAFA] text-[#8F8F8F] border-[#EAEAEA]"
+              ? "bg-[#FAFAFA] text-[#6B6B6B] border-[#EAEAEA]"
               : "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30"
           }`}
         >
           {label}
         </span>
-        <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F]" />
+        <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B]" />
       </div>
     </Link>
   );

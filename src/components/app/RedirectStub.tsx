@@ -12,7 +12,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 function Transitioning() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-white">
-      <p className="text-sm text-[#8F8F8F]">頁面已搬家，帶你過去…</p>
+      <p className="text-sm text-[#6B6B6B]">頁面已搬家，帶你過去…</p>
     </div>
   );
 }

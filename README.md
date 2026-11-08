@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 有物製所 ERP
 
-## Getting Started
+Next.js（靜態輸出）＋ Supabase。推到 `master` 後 GitHub Actions 先檢查、全過才部署到 GitHub Pages：
+https://joanzhang45.github.io/youwu-erp/
 
-First, run the development server:
+## 上線前的自動檢查（`.github/workflows/deploy.yml`）
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+| 關卡 | 內容 |
+|---|---|
+| check | `npm run lint`、`npm run typecheck`、`npm test`（`tests/*.test.ts`，Node 24 直接跑） |
+| db | 全新 Postgres 17 上依 `supabase/ci/platform_stub.sql` ＋ `supabase/schema.sql` 從零重建，跑 `supabase/tests/*.sql`（算錢、庫存），再匯出一次結構跟 repo 比對 |
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+推到其他分支也會跑檢查，但不部署。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 改資料庫的固定步驟
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. 寫 `supabase/migrations/NNN_xxx.sql`。
+2. 先在線上撤銷模式試跑：`DATABASE_URL=... python scripts/run_sql_tests.py --prelude supabase/migrations/NNN_xxx.sql`（測試一律撤銷，不留資料）。
+3. 套用到線上。
+4. 重新匯出結構：`DATABASE_URL=... python scripts/dump_schema.py`，把 `supabase/schema.sql` 和 `src/lib/database.generated.ts` 一起 commit。沒重匯，CI 的比對關卡會擋。
 
-## Learn More
+`supabase/schema.sql` 是「現在線上長怎樣」的完整快照，資料庫要從頭重建時用它，不用逐一重跑舊 migration（001 有兩版、部分舊 migration 不能重跑）。
 
-To learn more about Next.js, take a look at the following resources:
+## 腳本
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `scripts/import-shopee-monthly.py`：每月蝦皮訂單與廣告費匯入（要 `DATABASE_URL`、`SHOPEE_XLSX_PASSWORD`）。
+- `scripts/dump_schema.py`：匯出結構與前端型別。
+- `scripts/run_sql_tests.py`：跑資料庫測試。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+2026-11-08 移除 8 支舊工具（Ragic 匯入、舊對應／重算腳本、會蓋掉正確報表定義的舊 `create_views.sql`、關掉連線安全檢查的 `qa-check.py`），要看舊內容翻 git 歷史。
 
-## Deploy on Vercel
+## 帳號
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+只有白名單兩個帳號能讀寫（RLS policy `authenticated_whitelist`）。uid → 顯示名稱在 `app_users`。

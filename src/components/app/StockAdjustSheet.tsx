@@ -5,6 +5,8 @@
 import { useState } from "react";
 import type { Product } from "@/lib/database.types";
 import { CheckIcon } from "./icons";
+import { friendlyError } from "@/lib/friendlyError";
+import { Sheet } from "./Sheet";
 
 interface Props {
   product: Product;
@@ -38,33 +40,20 @@ export function StockAdjustSheet({ product, type, onConfirm, onClose }: Props) {
     try {
       await onConfirm(qty, reason);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "操作失敗");
+      setError(friendlyError(e, "操作失敗"));
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center">
-      <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-[#EAEAEA] p-5 app-sheet-enter">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-[#171717]">
-            {isIn ? "入庫" : "出庫"}
-          </h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-[#FAFAFA] text-[#666666] hover:bg-[#EAEAEA] transition-colors duration-150"
-            aria-label="關閉"
-          >
-            &times;
-          </button>
-        </div>
+    <Sheet title={isIn ? "入庫" : "出庫"} onClose={onClose}>
 
         <div className="bg-[#FAFAFA] rounded-xl p-3 mb-4 border border-[#EAEAEA]">
           <p className="font-medium text-sm text-[#171717]">{product.product_name}</p>
           {product.variant_name && (
             <p className="text-xs text-[#666666]">{product.variant_name}</p>
           )}
-          <p className="text-xs text-[#8F8F8F] mt-1">
+          <p className="text-xs text-[#6B6B6B] mt-1">
             目前庫存：<span className="font-semibold text-[#171717]">{product.stock_qty.toLocaleString()}</span>
           </p>
         </div>
@@ -157,7 +146,6 @@ export function StockAdjustSheet({ product, type, onConfirm, onClose }: Props) {
             </>
           )}
         </button>
-      </div>
-    </div>
+    </Sheet>
   );
 }

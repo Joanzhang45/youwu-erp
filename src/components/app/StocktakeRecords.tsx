@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
+import { friendlyError } from "@/lib/friendlyError";
 
 type SnapshotRow = { id: number; product_id: number; counted_qty: number; snapshot_date: string; note: string | null; created_at: string };
 type ProductLite = { id: number; product_name: string; variant_name: string | null };
@@ -73,7 +74,7 @@ export function StocktakeRecords() {
         setProducts(map);
       }
     } catch (e) {
-      toast(e instanceof Error ? e.message : "載入失敗", "error");
+      toast(friendlyError(e, "載入失敗"), "error");
     } finally {
       setLoading(false);
     }
@@ -86,19 +87,19 @@ export function StocktakeRecords() {
   return (
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
-        <Link href="/stock" className="inline-flex items-center gap-1 text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150 mb-2">
+        <Link href="/stock" className="inline-flex items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#171717] transition-colors duration-150 mb-2">
           ‹ 返回庫存
         </Link>
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">盤點紀錄</h1>
-        <p className="text-sm text-[#8F8F8F] mt-0.5">共 {sessions.length} 次盤點</p>
+        <p className="text-sm text-[#6B6B6B] mt-0.5">共 {sessions.length} 次盤點</p>
       </header>
 
       <main className="px-5 max-w-2xl mx-auto pb-10">
         {loading ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : sessions.length === 0 ? (
           <div className="rounded-2xl border border-[#EAEAEA] p-8 text-center">
-            <p className="text-sm text-[#8F8F8F]">還沒有盤點紀錄</p>
+            <p className="text-sm text-[#6B6B6B]">還沒有盤點紀錄</p>
             <Link href="/stock?stocktake=1" className="text-[#0070F3] text-sm underline mt-2 inline-block">開始第一次盤點</Link>
           </div>
         ) : (
@@ -113,13 +114,13 @@ export function StocktakeRecords() {
                   >
                     <div>
                       <p className="text-sm font-medium text-[#171717]">{session.snapshotDate}</p>
-                      <p className="text-xs text-[#8F8F8F] mt-0.5">
+                      <p className="text-xs text-[#6B6B6B] mt-0.5">
                         共 {session.rows.length} 項
                         {session.diffCount > 0 ? `，${session.diffCount} 項有差異` : "，全數與帳上一致"}
                       </p>
                     </div>
                     <span
-                      className={`text-[11px] px-2 py-0.5 rounded-full border font-medium flex-shrink-0 ${
+                      className={`text-[12px] px-2 py-0.5 rounded-full border font-medium flex-shrink-0 ${
                         session.diffCount > 0
                           ? "bg-[#F5A623]/10 text-[#F5A623] border-[#F5A623]/30"
                           : "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30"
@@ -138,7 +139,7 @@ export function StocktakeRecords() {
                             <p className="text-sm text-[#171717]">
                               {p ? `${p.product_name}${p.variant_name ? `（${p.variant_name}）` : ""}` : `商品 #${r.product_id}`}
                             </p>
-                            <p className={`text-xs mt-0.5 ${isDiff ? "text-[#F5A623]" : "text-[#8F8F8F]"}`}>{r.note}</p>
+                            <p className={`text-xs mt-0.5 ${isDiff ? "text-[#F5A623]" : "text-[#6B6B6B]"}`}>{r.note}</p>
                           </div>
                         );
                       })}

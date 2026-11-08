@@ -11,6 +11,7 @@ import type { ConsolidatedShipment } from "@/lib/database.types";
 import { CameraIcon, CheckIcon } from "./icons";
 import { uploadReceivingPhoto } from "./ReceivingPhotos";
 import { ShipmentCostSheet } from "./InboundSheets";
+import { friendlyError } from "@/lib/friendlyError";
 
 type Condition = "良好" | "異常";
 
@@ -39,11 +40,7 @@ type Draft = {
 };
 
 function receiveErrorText(e: unknown): string {
-  const msg = e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "";
-  if (msg.includes("ALREADY_RECEIVED")) return "這批貨已經點收過了，不能重複點收";
-  if (msg.includes("MISSING_WEIGHT")) return "這張集運單沒有填總重，運費沒辦法分攤，請先補上總重";
-  if (msg.includes("MISSING_COST")) return "這張集運單沒有填總運費，請先補上";
-  return msg || "點收失敗，資料沒有寫入，可以再試一次";
+  return friendlyError(e, "點收失敗，資料沒有寫入，可以再試一次");
 }
 
 function draftKey(shipmentId: number) {
@@ -158,7 +155,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
       setCurrentIndex(restoredIndex);
       setPhase(mapped.length > 0 ? "items" : "summary");
     } catch (e) {
-      toast(e instanceof Error ? e.message : "載入失敗", "error");
+      toast(friendlyError(e, "載入失敗"), "error");
       setPhase("error");
     }
   }, [shipmentId, toast]);
@@ -210,7 +207,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
       toast("照片已上傳");
     } catch (e) {
       setPhotoPreview(null);
-      toast(e instanceof Error ? `照片上傳失敗：${e.message}` : "照片上傳失敗，請再拍一次", "error");
+      toast(friendlyError(e, "照片上傳失敗，請再拍一次"), "error");
     } finally {
       setUploading(false);
     }
@@ -252,7 +249,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
   };
 
   if (phase === "loading") {
-    return <div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-[#6B6B6B] text-sm">載入中...</div>;
   }
 
   if (phase === "needcost" && shipment) {
@@ -260,7 +257,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
         <div className="max-w-sm">
           <p className="text-[#171717] font-medium mb-1">先補這批貨的總重和運費</p>
-          <p className="text-sm text-[#8F8F8F] mb-4">
+          <p className="text-sm text-[#6B6B6B] mb-4">
             {shipment.shipment_number} 還沒填{!(Number(shipment.total_weight_kg) > 0) ? "總重" : ""}
             {!(Number(shipment.total_weight_kg) > 0) && shipment.total_cost_ntd == null ? "和" : ""}
             {shipment.total_cost_ntd == null ? "總運費" : ""}，運費要按重量分到每件商品的成本，補好才能點收。
@@ -320,7 +317,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
             <CheckIcon className="w-8 h-8 text-[#0CCE6B]" />
           </div>
           <p className="text-lg font-semibold text-[#171717]">點收完成</p>
-          <p className="text-sm text-[#8F8F8F] mt-1">正在返回「今天」...</p>
+          <p className="text-sm text-[#6B6B6B] mt-1">正在返回「今天」...</p>
         </div>
       </div>
     );
@@ -330,7 +327,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
     return (
       <div className="min-h-screen bg-white app-fade-up-enter">
         <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
-          <p className="text-sm text-[#8F8F8F]">{shipment.shipment_number}</p>
+          <p className="text-sm text-[#6B6B6B]">{shipment.shipment_number}</p>
           <h1 className="text-xl font-semibold text-[#171717] tracking-tight mt-0.5">點收總覽</h1>
         </header>
         <main className="px-5 max-w-2xl mx-auto pb-28">
@@ -341,14 +338,14 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
                 <div key={item.id} className="px-4 py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-[#171717] truncate">{item.product_name}</p>
-                    {item.variant_name && <p className="text-xs text-[#8F8F8F] truncate">{item.variant_name}</p>}
+                    {item.variant_name && <p className="text-xs text-[#6B6B6B] truncate">{item.variant_name}</p>}
                   </div>
                   <div className="flex-shrink-0 text-right">
                     <p className={`text-sm font-semibold tabular-nums ${diff !== 0 ? "text-[#E00]" : "text-[#171717]"}`}>
-                      {item.actual_qty} <span className="text-[#8F8F8F] font-normal">/ {item.expected_qty}</span>
+                      {item.actual_qty} <span className="text-[#6B6B6B] font-normal">/ {item.expected_qty}</span>
                     </p>
                     {diff !== 0 && (
-                      <p className="text-[11px] text-[#E00]">{diff > 0 ? `+${diff}` : diff}</p>
+                      <p className="text-[12px] text-[#E00]">{diff > 0 ? `+${diff}` : diff}</p>
                     )}
                   </div>
                 </div>
@@ -367,7 +364,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
           >
             {phase === "submitting" ? "處理中..." : "完成點收"}
           </button>
-          <p className="text-[11px] text-[#8F8F8F] text-center mt-2">
+          <p className="text-[12px] text-[#6B6B6B] text-center mt-2">
             將更新庫存數量、落地成本，並建立點收紀錄
           </p>
         </main>
@@ -390,11 +387,11 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
       <div className="px-5 pt-5 max-w-2xl mx-auto w-full">
         <div className="flex items-center justify-between mb-2">
           {currentIndex > 0 ? (
-            <button onClick={goPrev} className="text-xs text-[#8F8F8F] hover:text-[#171717]">‹ 上一項</button>
+            <button onClick={goPrev} className="text-xs text-[#6B6B6B] hover:text-[#171717]">‹ 上一項</button>
           ) : (
             <span />
           )}
-          <span className="text-xs text-[#8F8F8F] tabular-nums">
+          <span className="text-xs text-[#6B6B6B] tabular-nums">
             {currentIndex + 1} / {items.length}
           </span>
         </div>
@@ -421,18 +418,18 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
             </div>
           )}
           <h2 className="text-xl font-semibold text-[#171717]">{current.product_name}</h2>
-          {current.variant_name && <p className="text-sm text-[#8F8F8F] mt-0.5">{current.variant_name}</p>}
+          {current.variant_name && <p className="text-sm text-[#6B6B6B] mt-0.5">{current.variant_name}</p>}
         </div>
 
         {/* 預期數量 */}
         <div className="text-center mb-5">
-          <p className="text-xs text-[#8F8F8F]">預期數量</p>
-          <p className="text-2xl font-medium text-[#8F8F8F] tabular-nums">{current.expected_qty}</p>
+          <p className="text-xs text-[#6B6B6B]">預期數量</p>
+          <p className="text-2xl font-medium text-[#6B6B6B] tabular-nums">{current.expected_qty}</p>
         </div>
 
         {/* 實收數量大數字輸入 */}
         <div className="mb-6">
-          <p className="text-xs text-[#8F8F8F] text-center mb-2">實收數量</p>
+          <p className="text-xs text-[#6B6B6B] text-center mb-2">實收數量</p>
           <div className="flex items-center justify-center gap-4">
             <button
               onClick={() => updateCurrent({ actual_qty: Math.max(0, current.actual_qty - 1) })}
@@ -472,7 +469,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
               className={`py-3 rounded-xl text-sm font-medium border transition-colors duration-150 ${
                 current.condition === "良好"
                   ? "bg-[#0CCE6B]/10 border-[#0CCE6B] text-[#0CCE6B]"
-                  : "bg-white border-[#EAEAEA] text-[#8F8F8F]"
+                  : "bg-white border-[#EAEAEA] text-[#6B6B6B]"
               }`}
             >
               良好
@@ -482,7 +479,7 @@ export function ReceivingFlow({ shipmentId }: { shipmentId: number }) {
               className={`py-3 rounded-xl text-sm font-medium border transition-colors duration-150 ${
                 current.condition === "異常"
                   ? "bg-[#E00]/10 border-[#E00] text-[#E00]"
-                  : "bg-white border-[#EAEAEA] text-[#8F8F8F]"
+                  : "bg-white border-[#EAEAEA] text-[#6B6B6B]"
               }`}
             >
               異常

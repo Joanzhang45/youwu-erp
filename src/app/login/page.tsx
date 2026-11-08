@@ -6,15 +6,12 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { signIn } from "@/lib/supabase";
+import { safeNextPath } from "@/lib/postgrestFilter";
 
-function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/login")) return "/today";
-  return raw;
-}
 
 function LoginForm() {
   const router = useRouter();
-  const next = safeNext(useSearchParams().get("next"));
+  const next = safeNextPath(useSearchParams().get("next"));
   const { session, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,7 +47,7 @@ function LoginForm() {
     <div className="min-h-screen bg-white flex items-center justify-center px-5">
       <form onSubmit={onSubmit} className="w-full max-w-xs">
         <h1 className="text-xl font-semibold text-[#171717]">有物製所 ERP</h1>
-        <p className="text-sm text-[#8F8F8F] mt-1 mb-6">登入一次，這台裝置會記住你</p>
+        <p className="text-sm text-[#6B6B6B] mt-1 mb-6">登入一次，這台裝置會記住你</p>
         <label className="block text-sm text-[#171717] mb-1.5" htmlFor="email">電子郵件</label>
         <input id="email" type="email" autoComplete="username" required value={email}
           onChange={(e) => setEmail(e.target.value)} className={input} />

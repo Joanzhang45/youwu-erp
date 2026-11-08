@@ -4,9 +4,17 @@
 // 「新舊接房間」的過渡選單，而是手機「更多」tab 的正式目的地：分析／商品／訂單／費用——
 // 4 個桌機有獨立頂部節點、但手機 4 個 bottom tab 放不下的頁面，收在這裡＋使用說明。
 // 「進貨」「庫存」「今天」在手機已有自己的 bottom tab，不再重複列在這裡。
-// M7（Joan 2026-07-14 二次拍板）：全站移除登入體驗，AuthProvider 背景自動登入，
-// 登出沒有意義了（登出後下一刻就被自動重新登入）——移除這頁原本的登出按鈕。
+// 2026-10-21 改回正常登入後，第二次健檢 #22 把登出加回來：「登出這台」只清這台裝置，
+// 「登出所有裝置」讓這個帳號在每台手機電腦上的登入一起失效（手機掉了時用）。
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/AuthContext";
+import { signOutUser } from "@/lib/supabase";
+import { staffNames } from "@/lib/staff";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { useToast } from "@/components/Toast";
+import { friendlyError } from "@/lib/friendlyError";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import {
   InsightsIcon,
@@ -47,9 +55,9 @@ function EntryRow({ entry }: { entry: Entry }) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-[#171717]">{entry.label}</p>
-        <p className="text-xs text-[#8F8F8F] truncate">{entry.desc}</p>
+        <p className="text-xs text-[#6B6B6B] truncate">{entry.desc}</p>
       </div>
-      <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F] flex-shrink-0" />
+      <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B] flex-shrink-0" />
     </Link>
   );
 }
@@ -76,10 +84,73 @@ function MorePageContent() {
           ))}
         </div>
 
-        <div className="rounded-2xl border border-[#EAEAEA] overflow-hidden">
+        <div className="rounded-2xl border border-[#EAEAEA] overflow-hidden mb-5">
           <EntryRow entry={helpEntry} />
         </div>
+
+        <AccountSection />
       </main>
+    </div>
+  );
+}
+
+function AccountSection() {
+  const { session } = useAuth();
+  const router = useRouter();
+  const { confirm } = useConfirm();
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const uid = session?.user.id;
+
+  useEffect(() => {
+    if (!uid) return;
+    staffNames().then((m) => setName(m.get(uid) ?? ""));
+  }, [uid]);
+
+  const logout = async (scope: "local" | "global") => {
+    const ok = await confirm(
+      scope === "local"
+        ? { title: "登出這台裝置？", message: "下次打開要重新輸入帳號密碼。", confirmText: "登出" }
+        : {
+            title: "登出所有裝置？",
+            message: "這個帳號在每一台手機、電腦上都會被登出，包含這台。手機遺失時用這個。",
+            confirmText: "全部登出",
+            danger: true,
+          },
+    );
+    if (!ok) return;
+    setBusy(true);
+    const { error } = await signOutUser(scope);
+    if (error) {
+      toast(friendlyError(error, "登出失敗"), "error");
+      setBusy(false);
+      return;
+    }
+    router.replace("/login");
+  };
+
+  return (
+    <div className="rounded-2xl border border-[#EAEAEA] p-4">
+      <p className="text-sm text-[#171717]">
+        目前登入：<span className="font-medium">{name || session?.user.email || "—"}</span>
+      </p>
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={() => logout("local")}
+          disabled={busy}
+          className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-[#EAEAEA] text-[#171717] active:scale-[0.98] transition-transform duration-150 disabled:opacity-50"
+        >
+          登出這台
+        </button>
+        <button
+          onClick={() => logout("global")}
+          disabled={busy}
+          className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-red-200 text-red-600 active:scale-[0.98] transition-transform duration-150 disabled:opacity-50"
+        >
+          登出所有裝置
+        </button>
+      </div>
     </div>
   );
 }

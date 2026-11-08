@@ -23,7 +23,7 @@ function formatCompact(n: number): string {
 export function MonthlyTrendChart({ data }: { data: MonthlyProfitability[] }) {
   if (data.length === 0) {
     return (
-      <div className="py-10 text-center text-sm text-[#8F8F8F]">尚無月度資料</div>
+      <div className="py-10 text-center text-sm text-[#6B6B6B]">尚無月度資料</div>
     );
   }
 
@@ -36,11 +36,11 @@ export function MonthlyTrendChart({ data }: { data: MonthlyProfitability[] }) {
   return (
     <div>
       <div className="flex items-center gap-4 mb-3">
-        <span className="flex items-center gap-1.5 text-[11px] text-[#8F8F8F]">
+        <span className="flex items-center gap-1.5 text-[12px] text-[#6B6B6B]">
           <span className="w-2.5 h-2.5 rounded-sm bg-[#EAEAEA] inline-block" />
           營收
         </span>
-        <span className="flex items-center gap-1.5 text-[11px] text-[#8F8F8F]">
+        <span className="flex items-center gap-1.5 text-[12px] text-[#6B6B6B]">
           <span className="w-2.5 h-2.5 rounded-sm bg-[#171717] inline-block" />
           淨利
         </span>
@@ -80,11 +80,11 @@ export function MonthlyTrendChart({ data }: { data: MonthlyProfitability[] }) {
                 x={cx}
                 y={baseY - revH - 6 < 10 ? 10 : baseY - revH - 6}
                 textAnchor="middle"
-                className="fill-[#171717] text-[9px] font-medium"
+                className="fill-[#171717] text-[10px] font-medium"
               >
                 {formatCompact(profit)}
               </text>
-              <text x={cx} y={CHART_HEIGHT - 4} textAnchor="middle" className="fill-[#8F8F8F] text-[10px]">
+              <text x={cx} y={CHART_HEIGHT - 4} textAnchor="middle" className="fill-[#8F8F8F] text-[11px]">
                 {monthNum}月
               </text>
             </g>

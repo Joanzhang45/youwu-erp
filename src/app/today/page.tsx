@@ -7,6 +7,7 @@ import type { ConsolidatedShipment } from "@/lib/database.types";
 import { isStockAlertEligible } from "@/lib/productStatus";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { ReceiveIcon, ChevronRightIcon } from "@/components/app/icons";
+import { actorName, staffNames } from "@/lib/staff";
 
 type ArrivedTask = { shipment: ConsolidatedShipment; itemCount: number };
 type ActivityRow = { id: number; text: string; time: string };
@@ -83,7 +84,7 @@ function TodayPageContent() {
           .order("month", { ascending: false })
           .limit(3),
         supabase.from("stock_snapshots").select("snapshot_date").order("snapshot_date", { ascending: false }).limit(1),
-        supabase.from("inventory_ledger").select("id, product_id, movement_type, qty_delta, note, occurred_at").order("occurred_at", { ascending: false }).limit(5),
+        supabase.from("inventory_ledger").select("id, product_id, movement_type, qty_delta, note, occurred_at, created_by").order("occurred_at", { ascending: false }).limit(5),
         supabase.from("v_reorder_suggestions").select("product_id", { count: "exact", head: true }).gt("suggest_qty", 0),
       ]);
 
@@ -124,16 +125,19 @@ function TodayPageContent() {
       let recent: ActivityRow[] = [];
       const ledgerRows = ledgerRes.data || [];
       if (ledgerRows.length > 0) {
-        const { data: prods } = await supabase
-          .from("products")
-          .select("id, product_name, variant_name")
-          .in("id", ledgerRows.map((r) => r.product_id));
+        const [{ data: prods }, names] = await Promise.all([
+          supabase
+            .from("products")
+            .select("id, product_name, variant_name")
+            .in("id", ledgerRows.map((r) => r.product_id)),
+          staffNames(),
+        ]);
         const prodMap = new Map((prods || []).map((p) => [p.id, p]));
         recent = ledgerRows.map((r) => {
           const prod = prodMap.get(r.product_id);
           const name = prod ? `${prod.product_name}${prod.variant_name ? `（${prod.variant_name}）` : ""}` : "商品";
           const label = MOVEMENT_LABEL[r.movement_type]?.(r.qty_delta) ?? `異動 ${r.qty_delta}`;
-          return { id: r.id, text: `${name} ${label}`, time: timeAgo(r.occurred_at) };
+          return { id: r.id, text: `${name} ${label}`, time: [timeAgo(r.occurred_at), actorName(names, r.created_by, r.occurred_at)].filter(Boolean).join("・") };
         });
       }
 
@@ -186,17 +190,17 @@ function TodayPageContent() {
   return (
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
-        <p className="text-sm text-[#8F8F8F]">{dateLabel}</p>
+        <p className="text-sm text-[#6B6B6B]">{dateLabel}</p>
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight mt-0.5">今天</h1>
       </header>
 
       <main className="px-5 max-w-2xl mx-auto pb-8">
         {loading ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : loadError ? (
           <div className="rounded-2xl border border-[#FFD6D6] bg-[#FFF5F5] p-5 text-center">
             <p className="text-sm font-medium text-[#C00]">資料沒有讀到，畫面上的數字可能不準</p>
-            <p className="text-xs text-[#8F8F8F] mt-1 break-all">{loadError}</p>
+            <p className="text-xs text-[#6B6B6B] mt-1 break-all">{loadError}</p>
             <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg bg-[#171717] text-white text-sm font-medium">
               重新讀取
             </button>
@@ -218,9 +222,9 @@ function TodayPageContent() {
                     <p className="text-sm font-medium text-[#171717]">
                       {shipment.shipment_number} 已到貨，待點收
                     </p>
-                    <p className="text-xs text-[#8F8F8F] mt-0.5">{itemCount} 個品項</p>
+                    <p className="text-xs text-[#6B6B6B] mt-0.5">{itemCount} 個品項</p>
                   </div>
-                  <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F] flex-shrink-0" />
+                  <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B] flex-shrink-0" />
                 </div>
               </Link>
             ))}
@@ -239,9 +243,9 @@ function TodayPageContent() {
                     <p className="text-sm font-medium text-[#171717]">
                       有 {data.inTransitCount} 單貨在路上
                     </p>
-                    <p className="text-xs text-[#8F8F8F] mt-0.5">查看在途集運單</p>
+                    <p className="text-xs text-[#6B6B6B] mt-0.5">查看在途集運單</p>
                   </div>
-                  <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F] flex-shrink-0" />
+                  <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B] flex-shrink-0" />
                 </div>
               </Link>
             )}
@@ -262,11 +266,11 @@ function TodayPageContent() {
                     <p className="text-sm font-medium text-[#171717]">
                       {data?.lastStocktakeDays == null ? "還沒盤點過" : `上次盤點已過 ${data.lastStocktakeDays} 天`}
                     </p>
-                    <p className="text-xs text-[#8F8F8F] mt-0.5">
+                    <p className="text-xs text-[#6B6B6B] mt-0.5">
                       {data?.lastStocktakeDays == null ? "點我開始第一次盤點" : "點我開始盤點"}
                     </p>
                   </div>
-                  <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F] flex-shrink-0" />
+                  <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B] flex-shrink-0" />
                 </div>
               </Link>
             )}
@@ -286,9 +290,9 @@ function TodayPageContent() {
               >
                 <div>
                   <p className="text-sm font-semibold text-[#171717]">有 {data.kpi.reorderCount} 項商品該補貨了</p>
-                  <p className="text-xs text-[#8F8F8F] mt-0.5">點我看該叫什麼、叫多少</p>
+                  <p className="text-xs text-[#6B6B6B] mt-0.5">點我看該叫什麼、叫多少</p>
                 </div>
-                <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F]" />
+                <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B]" />
               </Link>
             )}
 
@@ -299,21 +303,21 @@ function TodayPageContent() {
                 className="block rounded-2xl border border-[#EAEAEA] p-4 hover:border-[#171717] transition-colors duration-150 bg-white mt-5"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-medium text-[#8F8F8F]">本月摘要</p>
-                  <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F]" />
+                  <p className="text-xs font-medium text-[#6B6B6B]">本月摘要</p>
+                  <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B]" />
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                   <div>
                     <p className="text-2xl font-semibold text-[#171717] tabular-nums">
                       ${data.kpi.monthRevenue.toLocaleString()}
                     </p>
-                    <p className="text-[11px] text-[#8F8F8F] mt-0.5">本月營收（{data.kpi.monthOrders} 筆訂單）</p>
+                    <p className="text-[12px] text-[#6B6B6B] mt-0.5">本月營收（{data.kpi.monthOrders} 筆訂單）</p>
                   </div>
                   <div>
                     <p className="text-2xl font-semibold text-[#171717] tabular-nums">
                       ${data.kpi.monthGrossProfit.toLocaleString()}
                     </p>
-                    <p className="text-[11px] text-[#8F8F8F] mt-0.5">本月毛利</p>
+                    <p className="text-[12px] text-[#6B6B6B] mt-0.5">本月毛利</p>
                   </div>
                   <div>
                     <p
@@ -323,7 +327,7 @@ function TodayPageContent() {
                     >
                       ${data.kpi.monthNetProfit.toLocaleString()}
                     </p>
-                    <p className="text-[11px] text-[#8F8F8F] mt-0.5">本月淨利</p>
+                    <p className="text-[12px] text-[#6B6B6B] mt-0.5">本月淨利</p>
                   </div>
                   <div>
                     {/* 附帶 2 修復（tester 2026-07-12）：舊寫法「125（1 項低庫存）」把缺貨/低庫存
@@ -337,22 +341,22 @@ function TodayPageContent() {
                     >
                       {data.kpi.outOfStock}
                     </p>
-                    <p className="text-[11px] text-[#8F8F8F] mt-0.5">項缺貨 · {data.kpi.lowStock} 項低庫存</p>
+                    <p className="text-[12px] text-[#6B6B6B] mt-0.5">項缺貨 · {data.kpi.lowStock} 項低庫存</p>
                   </div>
                 </div>
-                <p className="text-[10px] text-[#8F8F8F] mt-3">不含停售/測品/季節款</p>
+                <p className="text-[11px] text-[#6B6B6B] mt-3">不含停售/測品/季節款</p>
               </Link>
             )}
 
             {/* 最近操作 */}
             {data && data.recent.length > 0 && (
               <div className="mt-6">
-                <p className="text-xs font-medium text-[#8F8F8F] mb-2 px-1">最近操作</p>
+                <p className="text-xs font-medium text-[#6B6B6B] mb-2 px-1">最近操作</p>
                 <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] bg-white overflow-hidden">
                   {data.recent.slice(0, 3).map((r) => (
                     <div key={r.id} className="px-4 py-3 flex items-center justify-between gap-3">
                       <p className="text-sm text-[#171717] truncate">{r.text}</p>
-                      <p className="text-[11px] text-[#8F8F8F] flex-shrink-0">{r.time}</p>
+                      <p className="text-[12px] text-[#6B6B6B] flex-shrink-0">{r.time}</p>
                     </div>
                   ))}
                 </div>
@@ -361,7 +365,7 @@ function TodayPageContent() {
 
             {/* 低調的使用說明入口——彣錩第一次看新版反映找不到按鈕，這頁是為他寫的白話說明書 */}
             <p className="text-center pt-4">
-              <Link href="/help" className="text-xs text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150">
+              <Link href="/help" className="text-xs text-[#6B6B6B] hover:text-[#171717] transition-colors duration-150">
                 ❓ 不會用？看使用說明
               </Link>
             </p>

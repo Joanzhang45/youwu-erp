@@ -24,6 +24,7 @@ import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
 import { CheckIcon } from "./icons";
+import { friendlyError } from "@/lib/friendlyError";
 
 type FlowItem = {
   id: number;
@@ -148,7 +149,7 @@ export function StocktakeFlow({ category }: { category: string }) {
       setCurrentIndex(restoredIndex);
       setPhase(mapped.length > 0 ? "items" : "empty");
     } catch (e) {
-      toast(e instanceof Error ? e.message : "載入失敗", "error");
+      toast(friendlyError(e, "載入失敗"), "error");
       setPhase("error");
     }
   }, [category, toast]);
@@ -232,7 +233,7 @@ export function StocktakeFlow({ category }: { category: string }) {
   };
 
   if (phase === "loading") {
-    return <div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-[#6B6B6B] text-sm">載入中...</div>;
   }
 
   if (phase === "error") {
@@ -250,7 +251,7 @@ export function StocktakeFlow({ category }: { category: string }) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
         <div>
-          <p className="text-sm text-[#8F8F8F] mb-3">「{category}」目前沒有可盤點的商品</p>
+          <p className="text-sm text-[#6B6B6B] mb-3">「{category}」目前沒有可盤點的商品</p>
           <Link href="/stock?stocktake=1" className="text-[#0070F3] text-sm underline">返回選擇分類</Link>
         </div>
       </div>
@@ -265,7 +266,7 @@ export function StocktakeFlow({ category }: { category: string }) {
             <CheckIcon className="w-8 h-8 text-[#0CCE6B]" />
           </div>
           <p className="text-lg font-semibold text-[#171717]">盤點完成</p>
-          <p className="text-sm text-[#8F8F8F] mt-1">正在返回「庫存」...</p>
+          <p className="text-sm text-[#6B6B6B] mt-1">正在返回「庫存」...</p>
         </div>
       </div>
     );
@@ -275,7 +276,7 @@ export function StocktakeFlow({ category }: { category: string }) {
     return (
       <div className="min-h-screen bg-white app-fade-up-enter">
         <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
-          <p className="text-sm text-[#8F8F8F]">{category}</p>
+          <p className="text-sm text-[#6B6B6B]">{category}</p>
           <h1 className="text-xl font-semibold text-[#171717] tracking-tight mt-0.5">盤點總覽</h1>
         </header>
         <main className="px-5 max-w-2xl mx-auto pb-28">
@@ -287,20 +288,20 @@ export function StocktakeFlow({ category }: { category: string }) {
                 <div key={item.id} className="px-4 py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-[#171717] truncate">{item.product_name}</p>
-                    {item.variant_name && <p className="text-xs text-[#8F8F8F] truncate">{item.variant_name}</p>}
+                    {item.variant_name && <p className="text-xs text-[#6B6B6B] truncate">{item.variant_name}</p>}
                   </div>
                   <div className="flex-shrink-0 text-right">
                     <p className={`text-sm font-semibold tabular-nums ${diff !== 0 ? "text-[#E00]" : "text-[#171717]"}`}>
-                      {item.actual_qty} <span className="text-[#8F8F8F] font-normal">/ {base}</span>
+                      {item.actual_qty} <span className="text-[#6B6B6B] font-normal">/ {base}</span>
                     </p>
-                    {diff !== 0 && <p className="text-[11px] text-[#E00]">{diff > 0 ? `+${diff}` : diff}</p>}
+                    {diff !== 0 && <p className="text-[12px] text-[#E00]">{diff > 0 ? `+${diff}` : diff}</p>}
                   </div>
                 </div>
               );
             })}
           </div>
 
-          <p className={`text-xs mb-4 text-center ${diffItems.length > 0 ? "text-[#F5A623]" : "text-[#8F8F8F]"}`}>
+          <p className={`text-xs mb-4 text-center ${diffItems.length > 0 ? "text-[#F5A623]" : "text-[#6B6B6B]"}`}>
             {diffItems.length > 0 ? `${diffItems.length} 項數量有差異，完成後將直接更新庫存` : "全數與帳上一致"}
           </p>
 
@@ -311,7 +312,7 @@ export function StocktakeFlow({ category }: { category: string }) {
           >
             {phase === "submitting" ? "處理中..." : "完成盤點"}
           </button>
-          <p className="text-[11px] text-[#8F8F8F] text-center mt-2">將把差異直接寫入庫存，並留下本次盤點紀錄</p>
+          <p className="text-[12px] text-[#6B6B6B] text-center mt-2">將把差異直接寫入庫存，並留下本次盤點紀錄</p>
         </main>
       </div>
     );
@@ -329,11 +330,11 @@ export function StocktakeFlow({ category }: { category: string }) {
       <div className="px-5 pt-5 max-w-2xl mx-auto w-full">
         <div className="flex items-center justify-between mb-2">
           {currentIndex > 0 ? (
-            <button onClick={goPrev} className="text-xs text-[#8F8F8F] hover:text-[#171717]">‹ 上一項</button>
+            <button onClick={goPrev} className="text-xs text-[#6B6B6B] hover:text-[#171717]">‹ 上一項</button>
           ) : (
-            <span className="text-xs text-[#8F8F8F]">{category}</span>
+            <span className="text-xs text-[#6B6B6B]">{category}</span>
           )}
-          <span className="text-xs text-[#8F8F8F] tabular-nums">
+          <span className="text-xs text-[#6B6B6B] tabular-nums">
             {currentIndex + 1} / {items.length}
           </span>
         </div>
@@ -354,16 +355,16 @@ export function StocktakeFlow({ category }: { category: string }) {
             <div className="w-28 h-28 rounded-2xl bg-[#FAFAFA] border border-[#EAEAEA] flex items-center justify-center text-4xl mb-4">📦</div>
           )}
           <h2 className="text-xl font-semibold text-[#171717]">{current.product_name}</h2>
-          {current.variant_name && <p className="text-sm text-[#8F8F8F] mt-0.5">{current.variant_name}</p>}
+          {current.variant_name && <p className="text-sm text-[#6B6B6B] mt-0.5">{current.variant_name}</p>}
         </div>
 
         <div className="text-center mb-5">
-          <p className="text-xs text-[#8F8F8F]">帳上數量</p>
-          <p className="text-2xl font-medium text-[#8F8F8F] tabular-nums">{current.expected_qty}</p>
+          <p className="text-xs text-[#6B6B6B]">帳上數量</p>
+          <p className="text-2xl font-medium text-[#6B6B6B] tabular-nums">{current.expected_qty}</p>
         </div>
 
         <div className="mb-6">
-          <p className="text-xs text-[#8F8F8F] text-center mb-2">實際數量</p>
+          <p className="text-xs text-[#6B6B6B] text-center mb-2">實際數量</p>
           <div className="flex items-center justify-center gap-4">
             <button
               onClick={() => updateCurrent({ actual_qty: Math.max(0, current.actual_qty - 1) })}
@@ -388,7 +389,7 @@ export function StocktakeFlow({ category }: { category: string }) {
             </button>
           </div>
           {/* 差異即時標色（PRD §4.3）：一致＝灰色小字確認感；有差異＝黃字＋± 差異量，一眼可辨 */}
-          <p className={`text-center text-xs mt-3 font-medium ${isMatch ? "text-[#8F8F8F]" : "text-[#F5A623]"}`}>
+          <p className={`text-center text-xs mt-3 font-medium ${isMatch ? "text-[#6B6B6B]" : "text-[#F5A623]"}`}>
             {isMatch ? "與帳上一致" : `差異 ${diff > 0 ? "+" : ""}${diff}`}
           </p>
         </div>

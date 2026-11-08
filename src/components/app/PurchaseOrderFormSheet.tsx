@@ -22,6 +22,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import type { Product, ProductSelection } from "@/lib/database.types";
 import { CheckIcon, ChevronRightIcon, PlusIcon, SearchIcon } from "./icons";
+import { friendlyError } from "@/lib/friendlyError";
+import { Sheet, SheetCloseButton } from "./Sheet";
+import { ilikeAny } from "@/lib/postgrestFilter";
 
 const CNY_RATE_DEFAULT = 4.45;
 const CATEGORIES = ["收納好物", "餐廚區", "浴廁區", "床寢區", "燈具", "玄關/穿鞋區", "衣物區", "布置小物"];
@@ -113,7 +116,7 @@ export function PurchaseOrderFormSheet({
         const supabase = getSupabase();
         let query = supabase.from("v_products_with_stock").select("*").order("product_name").limit(20);
         if (search) {
-          query = query.or(`product_name.ilike.%${search}%,sku.ilike.%${search}%,variant_name.ilike.%${search}%`);
+          query = query.or(ilikeAny(["product_name", "sku", "variant_name"], search));
         }
         const { data, error } = await query;
         if (error) throw error;
@@ -221,7 +224,7 @@ export function PurchaseOrderFormSheet({
       setUnitPrice(String(priceNum));
       setPhase("qty");
     } catch (e) {
-      setNpError(e instanceof Error ? e.message : "建立商品失敗");
+      setNpError(friendlyError(e, "建立商品失敗"));
     } finally {
       setNpSaving(false);
     }
@@ -305,35 +308,24 @@ export function PurchaseOrderFormSheet({
       }
       onCreated((data as { id: number }).id);
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : "建立失敗，請重試");
+      setSubmitError(friendlyError(e, "建立失敗，請重試"));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const CloseButton = () => (
-    <button
-      onClick={onClose}
-      className="w-8 h-8 flex items-center justify-center rounded-full bg-[#FAFAFA] text-[#666666] hover:bg-[#EAEAEA] transition-colors duration-150"
-      aria-label="關閉"
-    >
-      &times;
-    </button>
-  );
-
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center">
-      <div className="bg-white w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-[#EAEAEA] p-5 app-sheet-enter">
+    <Sheet onClose={onClose} dirty={items.length > 0}>
         {phase === "list" && (
           <>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-[#171717]">新增採購單</h2>
-              <CloseButton />
+              <SheetCloseButton />
             </div>
 
             {items.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[#EAEAEA] p-6 text-center mb-4">
-                <p className="text-sm text-[#8F8F8F]">還沒有加入任何品項</p>
+                <p className="text-sm text-[#6B6B6B]">還沒有加入任何品項</p>
               </div>
             ) : (
               <div className="rounded-xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden mb-4">
@@ -346,8 +338,8 @@ export function PurchaseOrderFormSheet({
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-[#171717] truncate">{i.product_name}</p>
-                      {i.variant_name && <p className="text-xs text-[#8F8F8F] truncate">{i.variant_name}</p>}
-                      <p className="text-xs text-[#8F8F8F] mt-0.5 tabular-nums">
+                      {i.variant_name && <p className="text-xs text-[#6B6B6B] truncate">{i.variant_name}</p>}
+                      <p className="text-xs text-[#6B6B6B] mt-0.5 tabular-nums">
                         x{i.qty} · ¥{i.unit_price_cny.toFixed(2)} = ¥{(i.qty * i.unit_price_cny).toFixed(2)}
                       </p>
                     </div>
@@ -391,11 +383,11 @@ export function PurchaseOrderFormSheet({
                 ‹ 返回
               </button>
               <h2 className="text-base font-semibold text-[#171717]">加入品項</h2>
-              <CloseButton />
+              <SheetCloseButton />
             </div>
 
             <div className="relative mb-3">
-              <SearchIcon className="w-4 h-4 text-[#8F8F8F] absolute left-3 top-1/2 -translate-y-1/2" />
+              <SearchIcon className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchInput}
@@ -408,9 +400,9 @@ export function PurchaseOrderFormSheet({
 
             <div className="max-h-56 overflow-y-auto space-y-1 mb-3">
               {searching ? (
-                <p className="text-center text-xs text-[#8F8F8F] py-4">搜尋中...</p>
+                <p className="text-center text-xs text-[#6B6B6B] py-4">搜尋中...</p>
               ) : results.length === 0 ? (
-                <p className="text-center text-xs text-[#8F8F8F] py-4">
+                <p className="text-center text-xs text-[#6B6B6B] py-4">
                   {search ? `沒有符合「${search}」的商品` : "輸入關鍵字搜尋既有商品"}
                 </p>
               ) : (
@@ -427,10 +419,10 @@ export function PurchaseOrderFormSheet({
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-[#171717] truncate">{p.product_name}</p>
-                      {p.variant_name && <p className="text-[11px] text-[#8F8F8F] truncate">{p.variant_name}</p>}
+                      {p.variant_name && <p className="text-[12px] text-[#6B6B6B] truncate">{p.variant_name}</p>}
                     </div>
                     {p.purchase_price_cny != null && (
-                      <span className="text-[11px] text-[#8F8F8F] flex-shrink-0 tabular-nums">¥{p.purchase_price_cny}</span>
+                      <span className="text-[12px] text-[#6B6B6B] flex-shrink-0 tabular-nums">¥{p.purchase_price_cny}</span>
                     )}
                   </button>
                 ))
@@ -450,7 +442,7 @@ export function PurchaseOrderFormSheet({
                 setShowCandidates(next);
                 if (next && candidates.length === 0) loadCandidates();
               }}
-              className="w-full flex items-center justify-between py-2 text-xs text-[#8F8F8F]"
+              className="w-full flex items-center justify-between py-2 text-xs text-[#6B6B6B]"
             >
               <span>從選品候選帶入品名</span>
               <ChevronRightIcon className={`w-3.5 h-3.5 transition-transform duration-150 ${showCandidates ? "rotate-90" : ""}`} />
@@ -458,9 +450,9 @@ export function PurchaseOrderFormSheet({
             {showCandidates && (
               <div className="max-h-40 overflow-y-auto space-y-1 mt-1">
                 {candidatesLoading ? (
-                  <p className="text-center text-xs text-[#8F8F8F] py-3">載入中...</p>
+                  <p className="text-center text-xs text-[#6B6B6B] py-3">載入中...</p>
                 ) : candidates.length === 0 ? (
-                  <p className="text-center text-xs text-[#8F8F8F] py-3">沒有可用的選品候選</p>
+                  <p className="text-center text-xs text-[#6B6B6B] py-3">沒有可用的選品候選</p>
                 ) : (
                   candidates.map((c) => (
                     <button
@@ -469,7 +461,7 @@ export function PurchaseOrderFormSheet({
                       className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[#FAFAFA] transition-colors duration-150 text-xs"
                     >
                       <span className="font-medium text-[#171717]">{c.product_name || "未命名"}</span>
-                      {c.category && <span className="text-[#8F8F8F] ml-1.5">{c.category}</span>}
+                      {c.category && <span className="text-[#6B6B6B] ml-1.5">{c.category}</span>}
                     </button>
                   ))
                 )}
@@ -485,7 +477,7 @@ export function PurchaseOrderFormSheet({
                 ‹ 返回
               </button>
               <h2 className="text-base font-semibold text-[#171717]">快速建立商品</h2>
-              <CloseButton />
+              <SheetCloseButton />
             </div>
 
             <div className="space-y-3">
@@ -534,7 +526,7 @@ export function PurchaseOrderFormSheet({
                   className="w-full px-3 py-2 border border-[#EAEAEA] rounded-lg text-sm outline-none focus:border-[#171717] transition-colors duration-150"
                 />
               </div>
-              <p className="text-[11px] text-[#8F8F8F]">商品狀態預設「常駐」，之後可到「商品」頁補齊其他資料</p>
+              <p className="text-[12px] text-[#6B6B6B]">商品狀態預設「常駐」，之後可到「商品」頁補齊其他資料</p>
             </div>
 
             {npError && <p className="text-[#E00] text-sm mt-3">{npError}</p>}
@@ -556,7 +548,7 @@ export function PurchaseOrderFormSheet({
                 ‹ 返回
               </button>
               <h2 className="text-base font-semibold text-[#171717]">數量與單價</h2>
-              <CloseButton />
+              <SheetCloseButton />
             </div>
 
             <div className="bg-[#FAFAFA] rounded-xl p-3 mb-4 border border-[#EAEAEA] flex items-center gap-2.5">
@@ -636,7 +628,7 @@ export function PurchaseOrderFormSheet({
                 ‹ 返回
               </button>
               <h2 className="text-base font-semibold text-[#171717]">訂單資訊</h2>
-              <CloseButton />
+              <SheetCloseButton />
             </div>
 
             <div className="space-y-3">
@@ -721,7 +713,6 @@ export function PurchaseOrderFormSheet({
             </button>
           </>
         )}
-      </div>
-    </div>
+    </Sheet>
   );
 }

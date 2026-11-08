@@ -13,7 +13,7 @@ import { ReceivingFlow } from "@/components/app/ReceivingFlow";
 import { ReceiveIcon } from "@/components/app/icons";
 
 const STATUS_STYLE: Record<string, string> = {
-  準備中: "bg-[#FAFAFA] text-[#8F8F8F] border-[#EAEAEA]",
+  準備中: "bg-[#FAFAFA] text-[#6B6B6B] border-[#EAEAEA]",
   已出發: "bg-[#0070F3]/10 text-[#0070F3] border-[#0070F3]/30",
   運送中: "bg-[#F5A623]/10 text-[#F5A623] border-[#F5A623]/30",
   已到達: "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30",
@@ -22,7 +22,7 @@ const STATUS_STYLE: Record<string, string> = {
 export default function ReceivePage() {
   return (
     <RequireAuth>
-      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>}>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#6B6B6B] text-sm">載入中...</div>}>
         <ReceiveContent />
       </Suspense>
     </RequireAuth>
@@ -88,17 +88,17 @@ function ShipmentSelectionList() {
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">到貨點收</h1>
-        <p className="text-sm text-[#8F8F8F] mt-0.5">在途與已到達的集運單</p>
+        <p className="text-sm text-[#6B6B6B] mt-0.5">在途與已到達的集運單</p>
       </header>
 
       <main className="px-5 max-w-2xl mx-auto pb-8">
         {loadError && !loading ? (
           <LoadError message={loadError} onRetry={fetchShipments} />
         ) : loading ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : shipments.length === 0 ? (
           <div className="rounded-2xl border border-[#EAEAEA] p-8 text-center">
-            <p className="text-sm text-[#8F8F8F]">目前沒有在途或待點收的集運單</p>
+            <p className="text-sm text-[#6B6B6B]">目前沒有在途或待點收的集運單</p>
           </div>
         ) : (
           <div className="space-y-3 app-fade-up-enter">
@@ -114,15 +114,15 @@ function ShipmentSelectionList() {
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-[#171717] font-mono">{s.shipment_number}</p>
-                      <p className="text-xs text-[#8F8F8F] mt-0.5">
+                      <p className="text-xs text-[#6B6B6B] mt-0.5">
                         {s.forwarder} · {s.shipping_method} · {count} 個品項
                       </p>
                     </div>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium border flex-shrink-0 ${STATUS_STYLE[s.status || ""] || ""}`}>
+                    <span className={`text-[12px] px-2 py-0.5 rounded-full font-medium border flex-shrink-0 ${STATUS_STYLE[s.status || ""] || ""}`}>
                       {s.status}
                     </span>
                   </div>
-                  <p className="text-xs text-[#8F8F8F]">
+                  <p className="text-xs text-[#6B6B6B]">
                     預計到貨 {s.expected_arrival || "—"}
                   </p>
                   {arrived && (

@@ -12,6 +12,7 @@ import { useToast } from "@/components/Toast";
 import type { MonthlyProfitability, Product } from "@/lib/database.types";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { MonthlyTrendChart } from "@/components/app/MonthlyTrendChart";
+import { friendlyError } from "@/lib/friendlyError";
 
 type Period = "month" | "lastMonth" | "custom";
 type RankTab = "top" | "bottom";
@@ -147,7 +148,7 @@ function InsightsPageContent() {
       setAds(adsData.map((a) => ({ d: a.ad_date, amount: a.amount })));
       setExpenses(expData.map((e) => ({ d: e.expense_date, amount: e.amount })));
     } catch (e) {
-      toast(e instanceof Error ? e.message : "載入失敗", "error");
+      toast(friendlyError(e, "載入失敗"), "error");
     } finally {
       setLoading(false);
     }
@@ -267,12 +268,12 @@ function InsightsPageContent() {
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-4 max-w-3xl mx-auto">
         <h1 className="text-2xl font-semibold text-[#171717] tracking-tight">分析</h1>
-        <p className="text-sm text-[#8F8F8F] mt-0.5">這個月賺不賺、該補什麼</p>
+        <p className="text-sm text-[#6B6B6B] mt-0.5">這個月賺不賺、該補什麼</p>
       </header>
 
       <main className="px-5 max-w-3xl mx-auto pb-10">
         {loading ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : (
           <div className="space-y-5 app-fade-up-enter">
             {/* 期間篩選：搬到最上面、脫離「商品排行」卡——這是整頁共用的期間控制（同時
@@ -307,7 +308,7 @@ function InsightsPageContent() {
                     onChange={(e) => setCustomFrom(e.target.value)}
                     className="min-h-11 px-2 border border-[#EAEAEA] rounded-lg outline-none focus:border-[#171717] text-xs"
                   />
-                  <span className="text-[#8F8F8F] text-xs">至</span>
+                  <span className="text-[#6B6B6B] text-xs">至</span>
                   <input
                     type="date"
                     value={customTo}
@@ -321,22 +322,22 @@ function InsightsPageContent() {
             {/* 損益卡（A9：桌機 1280 首屏含本月營收／毛利，金額全千分位）——標題與數字
                 跟著上面「期間篩選」pills 走，見 headline useMemo */}
             <section className="rounded-2xl border border-[#EAEAEA] p-5">
-              <p className="text-xs font-medium text-[#8F8F8F] mb-3">
+              <p className="text-xs font-medium text-[#6B6B6B] mb-3">
                 {headlineTitle}
-                {range && <span className="ml-1.5 text-[#B0B0B0]">{range.from.slice(5).replace("-", "/")}～{range.to.slice(5).replace("-", "/")}</span>}
+                {range && <span className="ml-1.5 text-[#8F8F8F]">{range.from.slice(5).replace("-", "/")}～{range.to.slice(5).replace("-", "/")}</span>}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <p className="text-2xl sm:text-3xl font-semibold text-[#171717] tabular-nums">
                     ${fmtMoney(headline.total_net_revenue)}
                   </p>
-                  <p className="text-[11px] text-[#8F8F8F] mt-0.5">營收（{headline.order_count} 筆訂單）</p>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5">營收（{headline.order_count} 筆訂單）</p>
                 </div>
                 <div>
                   <p className="text-2xl sm:text-3xl font-semibold text-[#171717] tabular-nums">
                     ${fmtMoney(headline.gross_profit)}
                   </p>
-                  <p className="text-[11px] text-[#8F8F8F] mt-0.5">毛利</p>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5">毛利</p>
                 </div>
                 <div>
                   <p
@@ -346,13 +347,13 @@ function InsightsPageContent() {
                   >
                     ${fmtMoney(headline.net_profit)}
                   </p>
-                  <p className="text-[11px] text-[#8F8F8F] mt-0.5">淨利</p>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5">淨利</p>
                 </div>
                 <div>
                   <p className="text-2xl sm:text-3xl font-semibold text-[#171717] tabular-nums">
                     {headline.order_count.toLocaleString()}
                   </p>
-                  <p className="text-[11px] text-[#8F8F8F] mt-0.5">訂單數</p>
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5">訂單數</p>
                 </div>
               </div>
             </section>
@@ -360,14 +361,14 @@ function InsightsPageContent() {
             {/* 月度趨勢（固定近 6 個月，不受上面期間篩選影響——見 PRD §5「月度趨勢」與
                 「商品排行期間篩選」是兩個獨立需求；損益卡與排行改用原始訂單即時算，這裡只切最新 6 個月畫圖） */}
             <section className="rounded-2xl border border-[#EAEAEA] p-5">
-              <p className="text-xs font-medium text-[#8F8F8F] mb-3">近 6 個月營收／淨利</p>
+              <p className="text-xs font-medium text-[#6B6B6B] mb-3">近 6 個月營收／淨利</p>
               <MonthlyTrendChart data={monthly.slice(0, 6)} />
             </section>
 
             {/* 商品排行（沿用上面同一組期間篩選 state，只多一個 Top/Bottom 切換） */}
             <section className="rounded-2xl border border-[#EAEAEA] p-5">
               <div className="flex items-center justify-between mb-4">
-                <p className="text-xs font-medium text-[#8F8F8F]">商品排行</p>
+                <p className="text-xs font-medium text-[#6B6B6B]">商品排行</p>
                 <div className="flex gap-1 bg-[#FAFAFA] p-0.5 rounded-lg border border-[#EAEAEA]">
                   {([
                     { key: "top" as const, label: "Top 10" },
@@ -377,7 +378,7 @@ function InsightsPageContent() {
                       key={t.key}
                       onClick={() => setRankTab(t.key)}
                       className={`min-h-11 px-3 flex items-center justify-center rounded-md text-xs transition-colors duration-150 ${
-                        rankTab === t.key ? "bg-white text-[#171717] font-medium shadow-sm" : "text-[#8F8F8F]"
+                        rankTab === t.key ? "bg-white text-[#171717] font-medium shadow-sm" : "text-[#6B6B6B]"
                       }`}
                     >
                       {t.label}
@@ -387,9 +388,9 @@ function InsightsPageContent() {
               </div>
 
               {period === "custom" && (!customFrom || !customTo) ? (
-                <p className="text-center text-sm text-[#8F8F8F] py-8">請選擇起訖日期</p>
+                <p className="text-center text-sm text-[#6B6B6B] py-8">請選擇起訖日期</p>
               ) : displayList.length === 0 ? (
-                <p className="text-center text-sm text-[#8F8F8F] py-8">本期尚無出貨紀錄</p>
+                <p className="text-center text-sm text-[#6B6B6B] py-8">本期尚無出貨紀錄</p>
               ) : (
                 <>
                   <div className="rounded-xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden">
@@ -397,7 +398,7 @@ function InsightsPageContent() {
                       const isLoss = r.totalProfit < 0;
                       return (
                         <div key={r.id} className="px-3.5 py-3 flex items-center gap-3">
-                          <span className="w-5 text-xs text-[#8F8F8F] tabular-nums flex-shrink-0">{idx + 1}</span>
+                          <span className="w-5 text-xs text-[#6B6B6B] tabular-nums flex-shrink-0">{idx + 1}</span>
                           {r.product_image ? (
                             <img
                               src={r.product_image}
@@ -412,15 +413,15 @@ function InsightsPageContent() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-[#171717] truncate">{r.product_name}</p>
                             <div className="flex items-center gap-2">
-                              {r.variant_name && <p className="text-xs text-[#8F8F8F] truncate">{r.variant_name}</p>}
-                              <span className="text-[11px] text-[#8F8F8F] tabular-nums flex-shrink-0">已售 {r.periodQty}</span>
+                              {r.variant_name && <p className="text-xs text-[#6B6B6B] truncate">{r.variant_name}</p>}
+                              <span className="text-[12px] text-[#6B6B6B] tabular-nums flex-shrink-0">已售 {r.periodQty}</span>
                             </div>
                           </div>
                           <div className="text-right flex-shrink-0">
                             <p className={`text-sm font-semibold tabular-nums ${isLoss ? "text-[#E00]" : "text-[#171717]"}`}>
                               ${Math.round(r.totalProfit).toLocaleString()}
                             </p>
-                            <p className="text-[11px] text-[#8F8F8F] tabular-nums">{(r.margin * 100).toFixed(0)}% 毛利率</p>
+                            <p className="text-[12px] text-[#6B6B6B] tabular-nums">{(r.margin * 100).toFixed(0)}% 毛利率</p>
                           </div>
                         </div>
                       );

@@ -8,6 +8,8 @@ import { PRODUCT_STATUS_OPTIONS } from "@/lib/productStatus";
 import { useState } from "react";
 import type { Product } from "@/lib/database.types";
 import { CheckIcon } from "./icons";
+import { friendlyError } from "@/lib/friendlyError";
+import { Sheet } from "./Sheet";
 
 const CATEGORIES = ["收納好物", "餐廚區", "浴廁區", "床寢區", "燈具", "玄關/穿鞋區", "衣物區", "布置小物"];
 
@@ -36,7 +38,7 @@ export function ProductFormSheet({
     try {
       await onCreate(form);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "新增失敗");
+      setError(friendlyError(e, "新增失敗"));
       setSaving(false);
     }
   };
@@ -71,18 +73,7 @@ export function ProductFormSheet({
   );
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center">
-      <div className="bg-white w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-[#EAEAEA] p-5 app-sheet-enter">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-[#171717]">新增商品</h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-[#FAFAFA] text-[#666666] hover:bg-[#EAEAEA] transition-colors duration-150"
-            aria-label="關閉"
-          >
-            &times;
-          </button>
-        </div>
+    <Sheet title={"新增商品"} onClose={onClose}>
 
         <div className="space-y-3">
           {renderField({ label: "商品名稱 *", field: "product_name", placeholder: "例：矽藻土杯墊" })}
@@ -160,7 +151,6 @@ export function ProductFormSheet({
             </>
           )}
         </button>
-      </div>
-    </div>
+    </Sheet>
   );
 }

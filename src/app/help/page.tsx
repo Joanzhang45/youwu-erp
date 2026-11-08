@@ -36,7 +36,7 @@ function Section({
     >
       <summary className="flex items-center justify-between gap-3 px-5 py-4 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
         <span className="text-xl font-semibold text-[#171717] tracking-tight">{title}</span>
-        <ChevronRightIcon className="w-5 h-5 text-[#8F8F8F] flex-shrink-0 transition-transform duration-200 group-open:rotate-90" />
+        <ChevronRightIcon className="w-5 h-5 text-[#6B6B6B] flex-shrink-0 transition-transform duration-200 group-open:rotate-90" />
       </summary>
       <div className="px-5 pb-5 pt-1 border-t border-[#EAEAEA] space-y-4">{children}</div>
     </details>
@@ -56,7 +56,7 @@ function StepCard({ n, children }: { n: number; children: ReactNode }) {
 
 function NoteBox({ children }: { children: ReactNode }) {
   return (
-    <p className="text-base text-[#8F8F8F] leading-relaxed rounded-xl bg-[#FAFAFA] px-4 py-3">
+    <p className="text-base text-[#6B6B6B] leading-relaxed rounded-xl bg-[#FAFAFA] px-4 py-3">
       {children}
     </p>
   );
@@ -83,7 +83,7 @@ export default function HelpPage() {
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-2 max-w-2xl mx-auto">
         <h1 className="text-3xl font-semibold text-[#171717] tracking-tight">使用說明</h1>
-        <p className="text-lg text-[#8F8F8F] mt-2 leading-relaxed">
+        <p className="text-lg text-[#6B6B6B] mt-2 leading-relaxed">
           這一頁教你怎麼用。找不到東西就回來看這頁，或直接問瓊安。
         </p>
       </header>
@@ -91,7 +91,7 @@ export default function HelpPage() {
       <main className="px-5 max-w-2xl mx-auto pb-10 pt-4 space-y-3 app-fade-up-enter">
         {/* 第 0 節：先認識底部四顆按鈕 */}
         <Section title="先認識下面四顆按鈕" defaultOpen>
-          <p className="text-base text-[#8F8F8F]">手機打開 app，最下面固定有四顆，先記這四顆就好。</p>
+          <p className="text-base text-[#6B6B6B]">手機打開 app，最下面固定有四顆，先記這四顆就好。</p>
           <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden">
             {TAB_INTRO.map(({ Icon, label, desc }) => (
               <div key={label} className="flex items-center gap-4 px-4 py-3.5">
@@ -100,7 +100,7 @@ export default function HelpPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-lg font-semibold text-[#171717]">{label}</p>
-                  <p className="text-base text-[#8F8F8F] mt-0.5">{desc}</p>
+                  <p className="text-base text-[#6B6B6B] mt-0.5">{desc}</p>
                 </div>
               </div>
             ))}
@@ -109,7 +109,7 @@ export default function HelpPage() {
 
         {/* 第 1 節：進貨的東西在哪（彣錩的痛點，放最前面） */}
         <Section title="進貨的東西在哪" defaultOpen>
-          <p className="text-base text-[#8F8F8F]">這是彣錩最卡的地方，先看這個。</p>
+          <p className="text-base text-[#6B6B6B]">這是彣錩最卡的地方，先看這個。</p>
           <div className="space-y-4">
             <StepCard n={1}>點下面第二顆「進貨」。</StepCard>
             <StepCard n={2}>
@@ -183,7 +183,7 @@ export default function HelpPage() {
           </div>
         </Section>
 
-        <p className="text-sm text-[#8F8F8F] text-center pt-3">
+        <p className="text-sm text-[#6B6B6B] text-center pt-3">
           這頁會跟著系統更新。最後更新：2026-07-14
         </p>
 

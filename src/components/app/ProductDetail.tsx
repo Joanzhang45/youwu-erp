@@ -11,6 +11,7 @@ import { useToast } from "@/components/Toast";
 import type { Product } from "@/lib/database.types";
 import { ChevronRightIcon, CheckIcon } from "./icons";
 import { PRODUCT_STATUS_OPTIONS } from "@/lib/productStatus";
+import { friendlyError } from "@/lib/friendlyError";
 
 const POSITIONING_OPTIONS = ["引流款", "一般款", "利潤款"];
 
@@ -90,20 +91,20 @@ export function ProductDetail({ id }: { id: number }) {
       toast("已儲存");
       fetchProduct();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "儲存失敗", "error");
+      toast(friendlyError(e, "儲存失敗"), "error");
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-[#6B6B6B] text-sm">載入中...</div>;
   }
 
   if (notFound || !product || !form) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-5 text-center">
-        <p className="text-sm text-[#8F8F8F]">找不到這個商品</p>
+        <p className="text-sm text-[#6B6B6B]">找不到這個商品</p>
         <Link href="/catalog" className="text-[#0070F3] text-sm underline">
           返回商品列表
         </Link>
@@ -118,7 +119,7 @@ export function ProductDetail({ id }: { id: number }) {
   return (
     <div className="min-h-screen bg-white">
       <header className="px-5 pt-6 pb-2 max-w-2xl mx-auto">
-        <Link href="/catalog" className="inline-flex items-center gap-1 text-sm text-[#8F8F8F] hover:text-[#171717] transition-colors duration-150">
+        <Link href="/catalog" className="inline-flex items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#171717] transition-colors duration-150">
           <ChevronRightIcon className="w-4 h-4 rotate-180" />
           返回商品列表
         </Link>
@@ -138,8 +139,8 @@ export function ProductDetail({ id }: { id: number }) {
             )}
             <div className="min-w-0 flex-1">
               <h1 className="text-lg font-semibold text-[#171717] leading-tight">{product.product_name}</h1>
-              {product.variant_name && <p className="text-sm text-[#8F8F8F] mt-0.5">{product.variant_name}</p>}
-              {product.sku && <p className="text-xs text-[#8F8F8F] font-mono mt-1 truncate">{product.sku}</p>}
+              {product.variant_name && <p className="text-sm text-[#6B6B6B] mt-0.5">{product.variant_name}</p>}
+              {product.sku && <p className="text-xs text-[#6B6B6B] font-mono mt-1 truncate">{product.sku}</p>}
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-[#EAEAEA]">
@@ -147,21 +148,21 @@ export function ProductDetail({ id }: { id: number }) {
               <p className={`text-lg font-semibold tabular-nums ${isOut ? "text-[#E00]" : isLow ? "text-[#F5A623]" : "text-[#171717]"}`}>
                 {product.stock_qty.toLocaleString()}
               </p>
-              <p className="text-[11px] text-[#8F8F8F]">現貨庫存</p>
+              <p className="text-[12px] text-[#6B6B6B]">現貨庫存</p>
             </div>
             <div>
-              <p className="text-lg font-semibold text-[#171717] tabular-nums">{product.total_sold_qty.toLocaleString()}</p>
-              <p className="text-[11px] text-[#8F8F8F]">已售數量</p>
+              <p className="text-lg font-semibold text-[#171717] tabular-nums">{(product.total_sold_qty ?? 0).toLocaleString()}</p>
+              <p className="text-[12px] text-[#6B6B6B]">已售數量</p>
             </div>
             <div>
               <p className="text-lg font-semibold text-[#171717] tabular-nums">{margin != null ? `${margin}%` : "—"}</p>
-              <p className="text-[11px] text-[#8F8F8F]">預估毛利率</p>
+              <p className="text-[12px] text-[#6B6B6B]">預估毛利率</p>
             </div>
           </div>
         </section>
 
         <section className="rounded-2xl border border-[#EAEAEA] p-4 space-y-3">
-          <p className="text-xs font-medium text-[#8F8F8F]">編輯</p>
+          <p className="text-xs font-medium text-[#6B6B6B]">編輯</p>
           <div className="grid grid-cols-2 gap-3">
             <NumberField label="售價（NTD）" value={form.selling_price} onChange={(v) => setForm({ ...form, selling_price: v })} />
             <NumberField label="進貨價（CNY）" value={form.purchase_price_cny} onChange={(v) => setForm({ ...form, purchase_price_cny: v })} />

@@ -6,7 +6,7 @@ export function LoadError({ message, onRetry }: { message: string; onRetry: () =
   return (
     <div className="rounded-2xl border border-[#FFD6D6] bg-[#FFF5F5] p-5 text-center">
       <p className="text-sm font-medium text-[#C00]">資料沒有讀到，畫面上的內容可能不完整</p>
-      <p className="text-xs text-[#8F8F8F] mt-1 break-all">{friendlyLoadError(message)}</p>
+      <p className="text-xs text-[#6B6B6B] mt-1 break-all">{friendlyLoadError(message)}</p>
       <button onClick={onRetry} className="mt-4 px-4 py-2 rounded-lg bg-[#171717] text-white text-sm font-medium">
         重新讀取
       </button>

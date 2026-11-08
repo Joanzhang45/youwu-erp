@@ -140,3 +140,13 @@ input[type="number"] {
     animation-duration: 1ms;
   }
 }
+
+/* 手機不鎖縮放後（第二次健檢 #21），iPhone 遇到小於 16px 的輸入框會自動放大畫面；
+   觸控裝置上的輸入框一律至少 16px，避免點輸入框時畫面跳大 */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}

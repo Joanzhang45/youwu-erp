@@ -10,7 +10,7 @@
 -- 不動：anon 拒讀狀態（0 policy）／inventory_ledger 防竄改 trigger（007）／views（已 security_invoker=true，
 -- 底層表 policy 通了 view 自然通，不需要對 view 另建 policy）。
 --
--- Joan 專用帳號：qiongan0208@gmail.com，uid = d1bcb4cc-5619-42be-a194-16ab9a2a9dba
+-- Joan 專用帳號（email 不進 repo，2026-11-08 移除），uid = d1bcb4cc-5619-42be-a194-16ab9a2a9dba
 --（憑證/密碼另存 [[敏感憑證總表]]，不進 repo）
 
 DO $$

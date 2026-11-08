@@ -74,9 +74,9 @@ export function PurchaseOrderEditSheet({
         {rows.map((r, idx) => (
           <div key={r.id} className="p-3">
             <p className="text-xs font-medium text-[#171717] truncate">{r.name}</p>
-            {r.variant && <p className="text-[11px] text-[#8F8F8F] truncate">{r.variant}</p>}
+            {r.variant && <p className="text-[12px] text-[#6B6B6B] truncate">{r.variant}</p>}
             <div className="flex gap-2 mt-2">
-              <label className="flex-1 text-[11px] text-[#8F8F8F]">
+              <label className="flex-1 text-[12px] text-[#6B6B6B]">
                 數量
                 <input
                   type="number"
@@ -86,7 +86,7 @@ export function PurchaseOrderEditSheet({
                   className={inputClass}
                 />
               </label>
-              <label className="flex-1 text-[11px] text-[#8F8F8F]">
+              <label className="flex-1 text-[12px] text-[#6B6B6B]">
                 單價（人民幣）
                 <input
                   type="number"
@@ -98,11 +98,11 @@ export function PurchaseOrderEditSheet({
                 />
               </label>
             </div>
-            {Number(r.qty) === 0 && <p className="text-[11px] text-[#E00] mt-1">數量 0：存檔後這個品項會被刪掉</p>}
+            {Number(r.qty) === 0 && <p className="text-[12px] text-[#E00] mt-1">數量 0：存檔後這個品項會被刪掉</p>}
           </div>
         ))}
       </div>
-      <p className="text-xs text-[#8F8F8F] mb-3 text-right tabular-nums">
+      <p className="text-xs text-[#6B6B6B] mb-3 text-right tabular-nums">
         小計 ¥{subtotal.toFixed(2)} ≈ NT${Math.round(subtotal * (Number(rate) || 0)).toLocaleString()}
       </p>
       <Field label="備註">
@@ -296,7 +296,7 @@ export function ShipmentCreateSheet({
           <div key={i.id} className="p-3 flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-[#171717] truncate">{i.product_name}</p>
-              <p className="text-[11px] text-[#8F8F8F] truncate">
+              <p className="text-[12px] text-[#6B6B6B] truncate">
                 {i.variant_name ? `${i.variant_name} · ` : ""}叫貨 {i.qty}
                 {!i.product_id && <span className="text-[#E00]"> · 沒對到商品</span>}
               </p>
@@ -313,7 +313,7 @@ export function ShipmentCreateSheet({
         ))}
       </div>
       {unlinked.length > 0 && (
-        <p className="text-[11px] text-[#8F8F8F] mb-3">
+        <p className="text-[12px] text-[#6B6B6B] mb-3">
           沒對到商品的品項不能排進集運（點收時不會進庫存）。這些貨到了以後，用庫存頁的「入庫」手動加庫存，再按採購單上的「貨都到齊了，結案」。
         </p>
       )}

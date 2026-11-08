@@ -11,6 +11,8 @@ import { LoadError, errorMessage } from "@/components/app/LoadError";
 import { useToast } from "@/components/Toast";
 import type { CompetitorProduct, ProductSelection, ProductVariant } from "@/lib/database.types";
 import { ChevronRightIcon, CheckIcon, PlusIcon } from "./icons";
+import { friendlyError } from "@/lib/friendlyError";
+import { Sheet } from "./Sheet";
 
 // 本地日期字串（不經過 toISOString 的 UTC 轉換，同 ExpenseFormSheet／PurchaseOrderFormSheet
 // 慣例——台北 UTC+8，00:00~07:59 本地時間用 toISOString().slice(0,10) 會退回前一天）。
@@ -30,8 +32,8 @@ const STATUS_BADGE: Record<string, string> = {
   已通過: "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30",
   預購: "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30",
   已下單: "bg-[#0CCE6B]/10 text-[#0CCE6B] border-[#0CCE6B]/30",
-  已放棄: "bg-[#FAFAFA] text-[#8F8F8F] border-[#EAEAEA]",
-  不進貨: "bg-[#FAFAFA] text-[#8F8F8F] border-[#EAEAEA]",
+  已放棄: "bg-[#FAFAFA] text-[#6B6B6B] border-[#EAEAEA]",
+  不進貨: "bg-[#FAFAFA] text-[#6B6B6B] border-[#EAEAEA]",
 };
 
 const PAGE_SIZE = 20;
@@ -102,10 +104,10 @@ export function SelectionCandidatesSection() {
   return (
     <section className="mt-8">
       <div className="flex items-center justify-between mb-2 px-1">
-        <p className="text-xs font-medium text-[#8F8F8F]">選品候選</p>
+        <p className="text-xs font-medium text-[#6B6B6B]">選品候選</p>
         <div className="flex items-center gap-3">
-          <p className="text-[11px] text-[#8F8F8F]">{filtered.length} 筆</p>
-          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 text-[11px] text-[#0070F3] font-medium">
+          <p className="text-[12px] text-[#6B6B6B]">{filtered.length} 筆</p>
+          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 text-[12px] text-[#0070F3] font-medium">
             <PlusIcon className="w-3.5 h-3.5" />
             新增候選
           </button>
@@ -134,10 +136,10 @@ export function SelectionCandidatesSection() {
       {loadError && !loading ? (
         <LoadError message={loadError} onRetry={fetchData} />
       ) : loading ? (
-        <div className="text-center py-8 text-[#8F8F8F] text-sm">載入中...</div>
+        <div className="text-center py-8 text-[#6B6B6B] text-sm">載入中...</div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-[#EAEAEA] p-6 text-center">
-          <p className="text-sm text-[#8F8F8F]">沒有符合的選品候選</p>
+          <p className="text-sm text-[#6B6B6B]">沒有符合的選品候選</p>
         </div>
       ) : (
         <>
@@ -155,15 +157,15 @@ export function SelectionCandidatesSection() {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#171717] truncate">{s.product_name || "未命名"}</p>
-                  <p className="text-xs text-[#8F8F8F] truncate">
+                  <p className="text-xs text-[#6B6B6B] truncate">
                     {s.category || "未分類"}
                     {s.total_purchase_cost_ntd ? ` · NT$${Math.round(s.total_purchase_cost_ntd).toLocaleString()}` : ""}
                   </p>
                 </div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 font-medium ${STATUS_BADGE[s.status || ""] || ""}`}>
+                <span className={`text-[11px] px-2 py-0.5 rounded-full border flex-shrink-0 font-medium ${STATUS_BADGE[s.status || ""] || ""}`}>
                   {s.status || "-"}
                 </span>
-                <ChevronRightIcon className="w-4 h-4 text-[#8F8F8F] flex-shrink-0" />
+                <ChevronRightIcon className="w-4 h-4 text-[#6B6B6B] flex-shrink-0" />
               </Link>
             ))}
           </div>
@@ -217,24 +219,13 @@ export function SelectionCandidateFormSheet({
     try {
       await onCreate(form);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "新增失敗");
+      setError(friendlyError(e, "新增失敗"));
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center">
-      <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-[#EAEAEA] p-5 app-sheet-enter">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-[#171717]">新增選品候選</h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-[#FAFAFA] text-[#666666] hover:bg-[#EAEAEA] transition-colors duration-150"
-            aria-label="關閉"
-          >
-            &times;
-          </button>
-        </div>
+    <Sheet title="新增選品候選" onClose={onClose}>
 
         <div className="space-y-3">
           <div>
@@ -295,8 +286,7 @@ export function SelectionCandidateFormSheet({
             </>
           )}
         </button>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -357,14 +347,14 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
       toast("已儲存");
       fetchDetail();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "儲存失敗", "error");
+      toast(friendlyError(e, "儲存失敗"), "error");
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-[#8F8F8F] text-sm">載入中...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-[#6B6B6B] text-sm">載入中...</div>;
   }
 
   if (notFound || !selection) {
@@ -387,7 +377,7 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
           ← 進貨
         </Link>
         <h1 className="text-xl font-semibold text-[#171717] tracking-tight mt-1">{selection.product_name || "未命名"}</h1>
-        <p className="text-sm text-[#8F8F8F] mt-0.5">
+        <p className="text-sm text-[#6B6B6B] mt-0.5">
           {selection.selection_number} · {selection.selection_date || "-"}
         </p>
       </header>
@@ -402,7 +392,7 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
             <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${STATUS_BADGE[selection.status || ""] || ""}`}>
               {selection.status || "-"}
             </span>
-            {selection.category && <span className="text-xs text-[#8F8F8F]">{selection.category}</span>}
+            {selection.category && <span className="text-xs text-[#6B6B6B]">{selection.category}</span>}
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <InfoItem
@@ -425,17 +415,17 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
             <InfoItem label="運送方式" value={selection.shipping_method} />
             <InfoItem label="銷售模式" value={selection.sales_mode} />
           </div>
-          {selection.notes && <p className="text-xs text-[#8F8F8F] mt-3 border-t border-[#EAEAEA] pt-3">{selection.notes}</p>}
+          {selection.notes && <p className="text-xs text-[#6B6B6B] mt-3 border-t border-[#EAEAEA] pt-3">{selection.notes}</p>}
         </section>
 
         {variants.length > 0 && (
           <section>
-            <p className="text-xs font-medium text-[#8F8F8F] mb-2 px-1">款式（{variants.length}）</p>
+            <p className="text-xs font-medium text-[#6B6B6B] mb-2 px-1">款式（{variants.length}）</p>
             <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden">
               {variants.map((v) => (
                 <div key={v.id} className="px-3.5 py-3 flex items-center justify-between gap-3">
                   <p className="text-sm text-[#171717] truncate">{v.variant_name || "未命名款式"}</p>
-                  <p className="text-xs text-[#8F8F8F] tabular-nums flex-shrink-0">
+                  <p className="text-xs text-[#6B6B6B] tabular-nums flex-shrink-0">
                     {v.selling_price_ntd ? `NT$${Math.round(v.selling_price_ntd).toLocaleString()}` : "-"}
                     {v.margin_pct != null ? ` · ${(v.margin_pct * 100).toFixed(0)}%` : ""}
                   </p>
@@ -447,12 +437,12 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
 
         {competitors.length > 0 && (
           <section>
-            <p className="text-xs font-medium text-[#8F8F8F] mb-2 px-1">競品參考（{competitors.length}）</p>
+            <p className="text-xs font-medium text-[#6B6B6B] mb-2 px-1">競品參考（{competitors.length}）</p>
             <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden">
               {competitors.map((c) => (
                 <div key={c.id} className="px-3.5 py-3 flex items-center justify-between gap-3">
                   <p className="text-sm text-[#171717] truncate">{c.competitor_name || "未命名"}</p>
-                  <p className="text-xs text-[#8F8F8F] tabular-nums flex-shrink-0">
+                  <p className="text-xs text-[#6B6B6B] tabular-nums flex-shrink-0">
                     {c.competitor_price ? `$${c.competitor_price.toLocaleString()}` : "-"}
                   </p>
                 </div>
@@ -465,7 +455,7 @@ export function SelectionCandidateDetail({ id }: { id: number }) {
             舊頁核心欄位（狀態／備註）就地編輯，不必再繞出這個頁面。款式／競品的新增與刪除
             仍是舊頁專屬能力，低頻操作暫不搬（進貨重啟前才會用到，見 PRD §2.3 #12）。 */}
         <section className="rounded-2xl border border-[#EAEAEA] p-4 space-y-3">
-          <p className="text-xs font-medium text-[#8F8F8F]">編輯</p>
+          <p className="text-xs font-medium text-[#6B6B6B]">編輯</p>
           <div>
             <label className="block text-xs font-medium text-[#171717] mb-1">狀態</label>
             <select
@@ -513,7 +503,7 @@ function InfoItem({ label, value }: { label: string; value: string | null | unde
   if (!value) return null;
   return (
     <div>
-      <p className="text-[11px] text-[#8F8F8F]">{label}</p>
+      <p className="text-[12px] text-[#6B6B6B]">{label}</p>
       <p className="text-sm text-[#171717] font-medium mt-0.5">{value}</p>
     </div>
   );

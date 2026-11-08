@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
+import { friendlyError } from "@/lib/friendlyError";
 
 type Row = {
   product_id: number;
@@ -39,7 +40,7 @@ export function ReorderList() {
         .order("suggest_qty", { ascending: false });
       if (!alive) return;
       if (err) {
-        setError(err.message);
+        setError(friendlyError(err, "補貨清單讀取失敗"));
         return;
       }
       setError("");
@@ -65,7 +66,7 @@ export function ReorderList() {
           ← 庫存
         </Link>
         <h1 className="text-xl font-semibold text-[#171717] tracking-tight mt-1">該補貨的商品</h1>
-        <p className="text-xs text-[#8F8F8F] mt-1">
+        <p className="text-xs text-[#6B6B6B] mt-1">
           依近 60 天賣出速度，算到下一批貨到之前再多備 30 天。已叫貨還沒到的也扣掉了。
           {until && <> 銷售資料截至 {until}。</>}
         </p>
@@ -74,15 +75,15 @@ export function ReorderList() {
         {error ? (
           <div className="rounded-2xl border border-[#FFD6D6] bg-[#FFF5F5] p-5 text-center">
             <p className="text-sm font-medium text-[#C00]">資料沒有讀到</p>
-            <p className="text-xs text-[#8F8F8F] mt-1 break-all">{error}</p>
+            <p className="text-xs text-[#6B6B6B] mt-1 break-all">{error}</p>
             <button onClick={retry} className="mt-4 px-4 py-2 rounded-lg bg-[#171717] text-white text-sm font-medium">
               重新讀取
             </button>
           </div>
         ) : rows === null ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">載入中...</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">載入中...</div>
         ) : rows.length === 0 ? (
-          <div className="text-center py-16 text-[#8F8F8F] text-sm">目前沒有需要補貨的商品</div>
+          <div className="text-center py-16 text-[#6B6B6B] text-sm">目前沒有需要補貨的商品</div>
         ) : (
           <div className="rounded-2xl border border-[#EAEAEA] divide-y divide-[#EAEAEA] overflow-hidden">
             {rows.map((r) => (
@@ -99,8 +100,8 @@ export function ReorderList() {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#171717] truncate">{r.product_name}</p>
-                  {r.variant_name && <p className="text-xs text-[#8F8F8F] truncate">{r.variant_name}</p>}
-                  <p className="text-[11px] text-[#8F8F8F] mt-0.5">
+                  {r.variant_name && <p className="text-xs text-[#6B6B6B] truncate">{r.variant_name}</p>}
+                  <p className="text-[12px] text-[#6B6B6B] mt-0.5">
                     庫存 {r.stock_qty}
                     {r.on_order_qty > 0 && ` · 已叫 ${r.on_order_qty}`} · 60 天賣 {r.sold_60d}
                     {r.days_left != null && (
@@ -110,7 +111,7 @@ export function ReorderList() {
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-lg font-semibold text-[#171717] tabular-nums">{r.suggest_qty}</p>
-                  <p className="text-[10px] text-[#8F8F8F]">建議叫貨</p>
+                  <p className="text-[11px] text-[#6B6B6B]">建議叫貨</p>
                 </div>
               </Link>
             ))}
