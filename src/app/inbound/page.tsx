@@ -19,6 +19,13 @@ import { ChevronRightIcon, PlusIcon } from "@/components/app/icons";
 
 const HISTORY_PAGE_SIZE = 20;
 
+// 叫貨常用的採購網站（2026-11-09 瓊安要求，從舊 Ragic「採購」選單搬來；SUPER DELIVERY 她沒在用，不搬）
+const SUPPLIER_SITES = [
+  { label: "1688", href: "https://www.1688.com/" },
+  { label: "淘寶", href: "https://world.taobao.com/" },
+  { label: "淘購網（代付）", href: "https://www.taogo.com.tw/" },
+];
+
 export default function InboundPage() {
   return (
     <RequireAuth>
@@ -139,6 +146,22 @@ function InboundHome() {
           叫貨
         </button>
       </header>
+
+      <nav aria-label="採購網站" className="px-5 max-w-2xl mx-auto -mt-1 mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-[#6B6B6B]">採購網站</span>
+        {SUPPLIER_SITES.map((s) => (
+          <a
+            key={s.href}
+            href={s.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-h-9 px-3 rounded-full border border-[#EAEAEA] text-sm text-[#171717] flex items-center gap-1 hover:border-[#171717] transition-colors duration-150"
+          >
+            {s.label}
+            <span aria-hidden className="text-[#6B6B6B] text-xs">↗</span>
+          </a>
+        ))}
+      </nav>
 
       {/* pb-24（非 pb-10）：底部固定 AppTabBar 淨空加大，比照 PurchaseOrderTimeline 同批修復
           （tester A10 R1 Blocker），讓「選品候選」區塊的「載入更多」按鈕與歷史列表最後一列
