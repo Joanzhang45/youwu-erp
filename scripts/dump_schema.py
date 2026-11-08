@@ -23,6 +23,8 @@ SKIP_FUNCS = {"rls_auto_enable"}  # Supabase 平台的 event trigger 函式
 API_ROLES = ("anon", "authenticated", "service_role")
 
 
+# 名稱（name 型別）本來就用 C 定序；轉成 text 的排序欄位要明寫 COLLATE "C"，
+# 否則線上（en_US）和 CI（另一種語系）排出來順序不同，CI 的比對關卡會誤擋。
 def q(cur, sql, args=()):
     cur.execute(sql, args)
     return cur.fetchall()
@@ -59,7 +61,7 @@ def dump_sql(cur):
     for name, ddl in q(cur, """
         select p.proname, pg_get_functiondef(p.oid) from pg_proc p
         where p.pronamespace = 'public'::regnamespace and p.prokind = 'f'
-        order by p.proname, pg_get_function_identity_arguments(p.oid)"""):
+        order by p.proname, pg_get_function_identity_arguments(p.oid) COLLATE "C" """):
         if name in SKIP_FUNCS:
             continue
         out.append(ddl.strip() + ";")
@@ -99,11 +101,11 @@ def dump_sql(cur):
     for tbl, con, ddl in q(cur, """
         select conrelid::regclass::text, conname, pg_get_constraintdef(oid) from pg_constraint
         where connamespace = 'public'::regnamespace and contype in ('p','u','c','x') and conrelid <> 0
-        order by conrelid::regclass::text, contype desc, conname"""):
+        order by conrelid::regclass::text COLLATE "C", contype desc, conname"""):
         out.append(f"ALTER TABLE {tbl} ADD CONSTRAINT {ident(con)} {ddl};")
     for tbl, con, ddl in q(cur, """
         select conrelid::regclass::text, conname, pg_get_constraintdef(oid) from pg_constraint
-        where connamespace = 'public'::regnamespace and contype = 'f' order by conrelid::regclass::text, conname"""):
+        where connamespace = 'public'::regnamespace and contype = 'f' order by conrelid::regclass::text COLLATE "C", conname"""):
         out.append(f"ALTER TABLE {tbl} ADD CONSTRAINT {ident(con)} {ddl};")
     out.append("")
 
@@ -175,11 +177,11 @@ def dump_sql(cur):
     for t in rels:
         out.append(f"REVOKE ALL ON TABLE public.{ident(t)} FROM {', '.join(API_ROLES)};")
     for name, grantee, privs in q(cur, f"""
-        select c.relname, a.grantee::regrole::text, string_agg(a.privilege_type, ', ' order by a.privilege_type)
+        select c.relname, a.grantee::regrole::text, string_agg(a.privilege_type, ', ' order by a.privilege_type COLLATE "C")
         from pg_class c, aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
         where c.relnamespace = 'public'::regnamespace and c.relkind in ('r','v')
           and a.grantee <> 0 and a.grantee::regrole::text in {API_ROLES}
-        group by 1, 2 order by 1, 2"""):
+        group by 1, 2 order by c.relname, a.grantee::regrole::text COLLATE "C" """):
         out.append(f"GRANT {privs} ON TABLE public.{ident(name)} TO {grantee};")
     out.append(f"REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC, {', '.join(API_ROLES)};")
     who = "case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end"
@@ -188,7 +190,7 @@ def dump_sql(cur):
         from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
         where p.pronamespace = 'public'::regnamespace and p.prokind = 'f' and a.privilege_type = 'EXECUTE'
           and {who} in ('PUBLIC', 'anon', 'authenticated', 'service_role')
-        order by 1, 2, 3"""):
+        order by p.proname, pg_get_function_identity_arguments(p.oid) COLLATE "C", {who} COLLATE "C" """):
         if name in SKIP_FUNCS:
             continue
         out.append(f"GRANT EXECUTE ON FUNCTION public.{ident(name)}({args}) TO {grantee};")
@@ -196,11 +198,11 @@ def dump_sql(cur):
     for s in seqs:
         out.append(f"REVOKE ALL ON SEQUENCE public.{ident(s)} FROM {', '.join(API_ROLES)};")
     for name, grantee, privs in q(cur, f"""
-        select c.relname, a.grantee::regrole::text, string_agg(a.privilege_type, ', ' order by a.privilege_type)
+        select c.relname, a.grantee::regrole::text, string_agg(a.privilege_type, ', ' order by a.privilege_type COLLATE "C")
         from pg_class c, aclexplode(coalesce(c.relacl, acldefault('s', c.relowner))) a
         where c.relnamespace = 'public'::regnamespace and c.relkind = 'S'
           and a.grantee <> 0 and a.grantee::regrole::text in {API_ROLES}
-        group by 1, 2 order by 1, 2"""):
+        group by 1, 2 order by c.relname, a.grantee::regrole::text COLLATE "C" """):
         out.append(f"GRANT {privs} ON SEQUENCE public.{ident(name)} TO {grantee};")
     out.append("")
 
