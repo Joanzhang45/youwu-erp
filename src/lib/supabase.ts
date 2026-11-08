@@ -36,14 +36,13 @@ export async function signIn(email: string, password: string) {
   return getSupabase().auth.signInWithPassword({ email, password })
 }
 
-// 信箱登入連結（2026-11-08 瓊安要求：不用記密碼）。shouldCreateUser:false＝只寄給已存在的帳號，
-// 陌生 email 不會因此被建立帳號。redirectTo 必須在 Supabase 後台 URL Configuration 的允許清單內，
-// 不在清單時 Supabase 會改導到 Site URL。implicit flow（supabase-js 預設）：連結在任何瀏覽器開都能登入，
-// 回到 /login 後 detectSessionInUrl 從網址 # 取出 session。
-export async function sendLoginLink(email: string, redirectTo: string) {
-  return getSupabase().auth.signInWithOtp({
-    email,
-    options: { shouldCreateUser: false, emailRedirectTo: redirectTo },
+// Google 登入（2026-11-08 瓊安要求，取代同日的信箱連結登入）。整頁跳去 Google，選帳號後回到 redirectTo，
+// detectSessionInUrl 從網址取出 session。redirectTo 必須在 Supabase 後台 URL Configuration 允許清單內。
+// 後台已關「Allow new users to sign up」：只有既有帳號（同信箱自動綁定）能登入，陌生 Google 帳號會被擋並帶錯誤回來。
+export async function signInWithGoogle(redirectTo: string) {
+  return getSupabase().auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo, queryParams: { prompt: 'select_account' } },
   })
 }
 
