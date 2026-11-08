@@ -324,7 +324,7 @@ function InsightsPageContent() {
             <section className="rounded-2xl border border-[#EAEAEA] p-5">
               <p className="text-xs font-medium text-[#6B6B6B] mb-3">
                 {headlineTitle}
-                {range && <span className="ml-1.5 text-[#8F8F8F]">{range.from.slice(5).replace("-", "/")}～{range.to.slice(5).replace("-", "/")}</span>}
+                {range && <span className="ml-1.5 text-[#6B6B6B]">{range.from.slice(5).replace("-", "/")}～{range.to.slice(5).replace("-", "/")}</span>}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>

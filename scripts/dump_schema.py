@@ -8,6 +8,11 @@ dump_schema.py — 把資料庫 public schema 的完整結構匯出成兩份檔�
 Supabase 平台自己管的東西（auth／storage schema、event trigger、rls_auto_enable）不匯出，
 CI 重建時用 supabase/ci/platform_stub.sql 補最小替身。
 
+匯出範圍（沒列到的改動，CI 的比對關卡看不到，要自己留意）：public 的型別、序號（只有名稱，沒有起始值等參數）、
+函式、資料表、約束、索引、檢視、觸發（含停用狀態）、RLS（含 FORCE）、policy、對 anon／authenticated／
+service_role 的表／函式／序號權限、表與欄位說明。不含：欄位層級權限、ALTER DEFAULT PRIVILEGES、
+函式／索引／型別的說明、storage 的 bucket 與 policy（點收照片 receiving-photos 的權限在 migration 014）。
+
 用法（每次套用新 migration 之後跑一次，把兩份產出一起 commit）：
   DATABASE_URL=postgresql://... python scripts/dump_schema.py
 CI 會用同一支程式對「重建出來的資料庫」再匯出一次，跟 repo 裡的檔案比對，不一致就擋上線。
@@ -154,11 +159,19 @@ def dump_sql(cur):
         select pg_get_triggerdef(t.oid) from pg_trigger t join pg_class c on c.oid = t.tgrelid
         where c.relnamespace = 'public'::regnamespace and not t.tgisinternal order by c.relname, t.tgname"""):
         out.append(ddl + ";")
+    for tbl, trg, state in q(cur, """
+        select c.relname, t.tgname, t.tgenabled from pg_trigger t join pg_class c on c.oid = t.tgrelid
+        where c.relnamespace = 'public'::regnamespace and not t.tgisinternal and t.tgenabled <> 'O'
+        order by c.relname, t.tgname"""):
+        mode = {"D": "DISABLE", "R": "ENABLE REPLICA", "A": "ENABLE ALWAYS"}[state]
+        out.append(f"ALTER TABLE public.{ident(tbl)} {mode} TRIGGER {ident(trg)};")
     out.append("")
 
     # ---- RLS + policies ----
     for (t,) in q(cur, "select relname from pg_class where relkind='r' and relnamespace='public'::regnamespace and relrowsecurity order by relname"):
         out.append(f"ALTER TABLE public.{ident(t)} ENABLE ROW LEVEL SECURITY;")
+    for (t,) in q(cur, "select relname from pg_class where relkind='r' and relnamespace='public'::regnamespace and relforcerowsecurity order by relname"):
+        out.append(f"ALTER TABLE public.{ident(t)} FORCE ROW LEVEL SECURITY;")
     for tbl, pol, permissive, roles, cmd, qual, check in q(cur, """
         select tablename, policyname, permissive, roles, cmd, qual, with_check from pg_policies
         where schemaname = 'public' order by tablename, policyname"""):

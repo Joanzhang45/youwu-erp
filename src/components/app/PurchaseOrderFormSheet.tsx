@@ -390,6 +390,7 @@ export function PurchaseOrderFormSheet({
               <SearchIcon className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
+                data-no-dirty
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="搜尋既有商品名稱、SKU、款式..."

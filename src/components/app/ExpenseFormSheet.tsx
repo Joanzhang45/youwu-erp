@@ -70,6 +70,8 @@ export function ExpenseFormSheet({
   onClose: () => void;
 }) {
   const [form, setForm] = useState<ExpenseFormValue>(fromExpense(editing));
+  // 快捷日期、分類按鈕不是打字，Sheet 偵測不到；改用「跟打開時不一樣」判斷要不要先問
+  const [initialForm] = useState(() => JSON.stringify(fromExpense(editing)));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -91,7 +93,7 @@ export function ExpenseFormSheet({
   };
 
   return (
-    <Sheet title={editing ? "編輯營業費用" : "新增營業費用"} onClose={onClose}>
+    <Sheet title={editing ? "編輯營業費用" : "新增營業費用"} onClose={onClose} dirty={JSON.stringify(form) !== initialForm}>
 
         <div className="space-y-3">
           <div>

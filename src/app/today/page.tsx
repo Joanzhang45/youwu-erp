@@ -137,7 +137,7 @@ function TodayPageContent() {
           const prod = prodMap.get(r.product_id);
           const name = prod ? `${prod.product_name}${prod.variant_name ? `（${prod.variant_name}）` : ""}` : "商品";
           const label = MOVEMENT_LABEL[r.movement_type]?.(r.qty_delta) ?? `異動 ${r.qty_delta}`;
-          return { id: r.id, text: `${name} ${label}`, time: [timeAgo(r.occurred_at), actorName(names, r.created_by, r.occurred_at)].filter(Boolean).join("・") };
+          return { id: r.id, text: `${name} ${label}`, time: [timeAgo(r.occurred_at), actorName(names, r.created_by, r.id)].filter(Boolean).join("・") };
         });
       }
 

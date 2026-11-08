@@ -17,11 +17,12 @@ export function staffNames(): Promise<Map<string, string>> {
   return cache;
 }
 
-// migration 020 套用前的舊紀錄沒有記是誰，不顯示名字（不能猜）
-const ACTOR_RECORDED_FROM = "2026-11-08";
+// migration 020 套用當下帳本最大 id 是 2128（2026-11-08 查證：當時 873 筆 created_by 全為 NULL）。
+// 這之前的紀錄沒有記是誰，不顯示名字（不能猜）。
+const LAST_ID_BEFORE_ACTOR = 2128;
 
-// 回傳空字串＝不顯示。created_by 是 NULL 而且是 020 之後的紀錄＝匯入腳本等系統寫入
-export function actorName(names: Map<string, string>, uid: string | null | undefined, occurredAt: string): string {
-  if (uid) return names.get(uid) ?? "其他帳號";
-  return occurredAt >= ACTOR_RECORDED_FROM ? "系統" : "";
+// 回傳空字串＝不顯示。names 是空的（名單讀取失敗）也不顯示，免得每筆都變「其他帳號」。
+export function actorName(names: Map<string, string>, uid: string | null | undefined, ledgerId: number): string {
+  if (uid) return names.size === 0 ? "" : names.get(uid) ?? "其他帳號";
+  return ledgerId > LAST_ID_BEFORE_ACTOR ? "系統" : "";
 }

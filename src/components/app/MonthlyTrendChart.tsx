@@ -84,7 +84,7 @@ export function MonthlyTrendChart({ data }: { data: MonthlyProfitability[] }) {
               >
                 {formatCompact(profit)}
               </text>
-              <text x={cx} y={CHART_HEIGHT - 4} textAnchor="middle" className="fill-[#8F8F8F] text-[11px]">
+              <text x={cx} y={CHART_HEIGHT - 4} textAnchor="middle" className="fill-[#6B6B6B] text-[11px]">
                 {monthNum}月
               </text>
             </g>

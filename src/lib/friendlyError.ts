@@ -30,6 +30,7 @@ const DB_CODES: [string, string][] = [
 
 // 一般英文錯誤 → 中文（比對不分大小寫）
 const GENERIC: [RegExp, string][] = [
+  [/statement timeout|canceling statement/i, "資料庫處理太久被中止，資料沒有寫入，請再試一次"],
   [/failed to fetch|networkerror|network request failed|load failed|fetch failed|timeout|timed out/i, "網路連不上，資料沒有寫入，請確認網路後再試一次"],
   [/jwt expired|invalid jwt|refresh token|not authenticated|auth session missing/i, "登入已經過期，請重新登入"],
   [/row-level security|permission denied|42501/i, "這個帳號沒有權限做這件事"],

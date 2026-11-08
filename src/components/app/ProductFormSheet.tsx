@@ -73,7 +73,7 @@ export function ProductFormSheet({
   );
 
   return (
-    <Sheet title={"新增商品"} onClose={onClose}>
+    <Sheet title={"新增商品"} onClose={onClose} dirty={JSON.stringify(form) !== JSON.stringify(INITIAL)}>
 
         <div className="space-y-3">
           {renderField({ label: "商品名稱 *", field: "product_name", placeholder: "例：矽藻土杯墊" })}

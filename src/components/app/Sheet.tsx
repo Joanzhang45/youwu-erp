@@ -75,7 +75,10 @@ export function Sheet({
           role="dialog"
           aria-modal="true"
           aria-label={title}
-          onInput={() => setTyped(true)}
+          onInput={(e) => {
+            // 搜尋框之類不算「填了東西」：在輸入框加 data-no-dirty
+            if (!(e.target as HTMLElement).closest("[data-no-dirty]")) setTyped(true);
+          }}
           className="bg-white w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-[#EAEAEA] p-5 app-sheet-enter"
         >
           {title !== undefined && (
